@@ -38,8 +38,9 @@ import numpy as np
 import wandb
 from typing import List, Tuple, Optional
 from torch.utils.data import DataLoader
-from sentence_transformers import SentenceTransformer, losses, evaluation
-from sentence_transformers.readers import InputExample
+from sentence_transformers import SentenceTransformer, InputExample
+from sentence_transformers.losses import CosineSimilarityLoss
+from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
 from src.mlb_rag.pair_generator import SentencePair, build_finetuning_dataset
 from src.mlb_rag.embedder import MLBEmbedder, MLBVectorStore, build_vector_store, query_store
@@ -333,35 +334,26 @@ def compare_embeddings(
 # ── Quick Test ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from src.mlb_rag.data_ingestion import get_mock_chunks
+    from src.mlb_rag.data_ingestion import ingest_mlb_data, get_mock_chunks
 
-    print("=== Embedding Fine-Tuning Pipeline ===\n")
-
-    # Generate pairs
     pairs = build_finetuning_dataset(
-        n_paraphrase=400,
-        n_cross_type=200,
-        n_hard_neg=300,
-        n_true_neg=200,
+        n_paraphrase=600,
+        n_cross_type=300,
+        n_hard_neg=500,
+        n_true_neg=300,
     )
 
-    # Fine-tune (set use_wandb=False for quick test)
-    chunks = get_mock_chunks()
+    # Use real chunks if available
+    try:
+        chunks = ingest_mlb_data(days_back=3)
+        if not chunks:
+            chunks = get_mock_chunks()
+    except:
+        chunks = get_mock_chunks()
+
     model = finetune_embedding_model(
         pairs=pairs,
-        use_wandb=False,
+        use_wandb=True,
         chunks_for_eval=chunks,
-        config={**FINETUNE_CONFIG, "num_epochs": 2}  # 2 epochs for quick test
-    )
-
-    # Show before/after comparison
-    compare_embeddings(
-        query="close one-run game late comeback",
-        sentences=[
-            "Yankees edged Red Sox by 1 run, winning 3-2.",
-            "Dodgers dominated Giants 12-1 in a blowout.",
-            "Braves outlasted Mets 4-3 in 11 innings.",
-            "AL East standings: Yankees lead at 88-74.",
-            "Pitcher struck out 14 batters in dominant outing.",
-        ]
+        config={**FINETUNE_CONFIG, "num_epochs": 4, "learning_rate": 2e-5}
     )
