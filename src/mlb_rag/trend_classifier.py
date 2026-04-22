@@ -57,7 +57,7 @@ class ClassifierConfig:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Checkpointing
-    checkpoint_dir: str = "./checkpoints"
+    checkpoint_dir: str = "/var/tmp/prj004/checkpoints"
     checkpoint_name: str = "trend_classifier.pt"
 
 

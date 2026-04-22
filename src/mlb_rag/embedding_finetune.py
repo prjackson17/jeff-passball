@@ -49,7 +49,7 @@ from src.mlb_rag.data_ingestion import get_mock_chunks
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 BASE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-FINETUNED_MODEL_PATH = "./checkpoints/mlb-minilm-finetuned"
+FINETUNED_MODEL_PATH = "/var/tmp/prj004/checkpoints/mlb-minilm-finetuned"
 
 FINETUNE_CONFIG = {
     "base_model": BASE_MODEL,

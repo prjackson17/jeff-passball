@@ -21,7 +21,7 @@ import os
 from typing import List, Tuple, Optional
 from sentence_transformers import SentenceTransformer
 
-from data_ingestion import MLBChunk
+from src.mlb_rag.data_ingestion import MLBChunk
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
