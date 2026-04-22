@@ -242,10 +242,10 @@ def finetune_embedding_model(
 
     # CosineSimilarityLoss: trains by minimizing MSE between
     # cosine_sim(embed_a, embed_b) and target score
-    train_loss = losses.CosineSimilarityLoss(model)
+    train_loss = CosineSimilarityLoss(model)
 
     # Sentence-transformers evaluator for val set
-    val_evaluator = evaluation.EmbeddingSimilarityEvaluator.from_input_examples(
+    val_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
         val_examples,
         name="mlb-val"
     )
