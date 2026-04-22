@@ -330,14 +330,14 @@ def finetune_embedding_model(
         }
 
         # Retrieval eval every 2 epochs (more expensive)
-        if epoch % 2 == 0 or epoch == config["num_epochs"]:
+        if int(epoch) % 2 == 0 or int(epoch) == config["num_epochs"]:
             ft_embedder = MLBEmbedder(
                 model_name=FINETUNED_MODEL_PATH,
                 device=device
             )
             p_at_1 = evaluator.evaluate(
                 ft_embedder, chunks_for_eval,
-                label=f"epoch_{epoch}"
+                label=f"epoch_{int(epoch)}"
             )
             log_dict["retrieval/precision_at_1"] = p_at_1
             log_dict["retrieval/improvement_vs_baseline"] = p_at_1 - baseline_score
@@ -345,7 +345,7 @@ def finetune_embedding_model(
         if run:
             run.log(log_dict)
 
-        print(f"  Epoch {epoch:2d} | val_spearman={val_score:.4f}"
+        print(f"  Epoch {int(epoch):2d} | val_spearman={val_score:.4f}"
               + (f" | P@1={log_dict.get('retrieval/precision_at_1', '—')}"
                  if "retrieval/precision_at_1" in log_dict else ""))
 
