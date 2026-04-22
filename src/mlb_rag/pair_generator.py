@@ -120,7 +120,7 @@ def _standings_templates(team: str, wins: int, losses: int, division: str) -> Li
 
 # ── Pair Generators ────────────────────────────────────────────────────────────
 
-def generate_paraphrase_pairs(chunks: List[MLBChunk], n: int = 500) -> List[SentencePair]:
+def generate_paraphrase_pairs(n: int = 500) -> List[SentencePair]:
     """
     POSITIVE pairs: different phrasings of the same semantic content.
     Score: 0.9 (not 1.0 — they're paraphrases, not identical)
