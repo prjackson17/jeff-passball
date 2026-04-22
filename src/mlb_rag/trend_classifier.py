@@ -25,8 +25,8 @@ import os
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass, field
 
-from historical_data import GameFeatures
-from auto_labeler import label_dataset, label_distribution
+from src.mlb_rag.historical_data import GameFeatures
+from src.mlb_rag.auto_labeler import label_dataset, label_distribution
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────

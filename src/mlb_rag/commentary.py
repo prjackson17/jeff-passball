@@ -17,8 +17,8 @@ import json
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-from data_ingestion import MLBChunk
-from embedder import MLBVectorStore, MLBEmbedder, query_store
+from src.mlb_rag.data_ingestion import MLBChunk
+from src.mlb_rag.embedder import MLBVectorStore, MLBEmbedder, query_store
 
 
 # ── Claude API ─────────────────────────────────────────────────────────────────

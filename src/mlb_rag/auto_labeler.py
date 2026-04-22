@@ -20,7 +20,7 @@ import pandas as pd
 from typing import List, Tuple, Dict
 from dataclasses import dataclass
 
-from historical_data import GameFeatures, features_to_dataframe
+from src.mlb_rag.historical_data import GameFeatures, features_to_dataframe
 
 
 # ── Labeling Thresholds (tune these!) ─────────────────────────────────────────
