@@ -9,7 +9,7 @@ Each game → one row of features → one binary label (notable / routine)
 Author: Parker Jackson
 Course: CSCI 357 - AI and Neural Networks
 """
-
+import os
 import requests
 import numpy as np
 import pandas as pd
@@ -22,6 +22,7 @@ BASE_URL = "https://statsapi.mlb.com/api/v1"
 
 # ── Season date ranges ─────────────────────────────────────────────────────────
 SEASON_DATES = {
+    2023: ("2023-03-30", "2023-10-01"),
     2024: ("2024-03-20", "2024-09-29"),
     2025: ("2025-03-27", "2025-09-28"),
 }
@@ -307,6 +308,15 @@ def fetch_season(season: int = 2024, verbose: bool = True) -> List[GameFeatures]
     return all_features
 
 
+def fetch_multiple_seasons(seasons: List[int] = [2023, 2024, 2025]) -> List[GameFeatures]:
+    all_features = []
+    for season in seasons:
+        features = fetch_season(season, verbose=True)
+        all_features.extend(features)
+    print(f"\n[Historical] Combined total: {len(all_features)} games across {len(seasons)} seasons")
+    return all_features
+
+
 # ── DataFrame + Save ───────────────────────────────────────────────────────────
 
 def features_to_dataframe(features: List[GameFeatures]) -> pd.DataFrame:
@@ -375,13 +385,9 @@ def get_mock_features(n: int = 500) -> List[GameFeatures]:
 
 
 if __name__ == "__main__":
-    print("Fetching 2024 MLB season...")
-    features = fetch_season(2024, verbose=True)
+    features = fetch_multiple_seasons([2023, 2024, 2025])
     if features:
-        import os
         os.makedirs("./data", exist_ok=True)
-        save_features(features, path="./data/game_features_2024.npz")
+        save_features(features, path="./data/game_features_all.npz")
         df = features_to_dataframe(features)
         print(df.describe())
-    else:
-        print("No features fetched — check API connectivity")
