@@ -374,12 +374,14 @@ def get_mock_features(n: int = 500) -> List[GameFeatures]:
     return features
 
 
-# ── Quick Test ─────────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    # Use mock data in sandbox; swap to fetch_season(2024) on your machine
-    features = get_mock_features(200)
-    df = features_to_dataframe(features)
-    print(df.describe())
-    print(f"\nFeature vector shape: {features[0].to_numpy().shape}")
-    print(f"Feature names: {GameFeatures.feature_names()}")
+    print("Fetching 2024 MLB season...")
+    features = fetch_season(2024, verbose=True)
+    if features:
+        import os
+        os.makedirs("./data", exist_ok=True)
+        save_features(features, path="./data/game_features_2024.npz")
+        df = features_to_dataframe(features)
+        print(df.describe())
+    else:
+        print("No features fetched — check API connectivity")
