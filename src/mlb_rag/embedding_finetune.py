@@ -2,7 +2,19 @@
 embedding_finetune.py
 
 Fine-tunes the sentence transformer (all-MiniLM-L6-v2) on baseball-specific
-sentence pairs using CosineSimilarityLoss.
+sentence pairs.
+
+Loss function evolution (documented for notebook):
+    v1: CosineSimilarityLoss — minimizes MSE between cosine_sim(a,b) and
+        target score. Collapsed immediately (train_loss → 0.01 in 2 epochs)
+        because the model memorized score targets without learning generalizable
+        similarity geometry. All post-training cosine sims dropped uniformly.
+
+    v2: MultipleNegativesRankingLoss — treats every other item in the batch
+        as a negative for each anchor. Forces the model to discriminate between
+        similar and dissimilar pairs in a contrastive way. Standard loss for
+        retrieval fine-tuning (used in SBERT, E5, etc.)
+        Only uses positive pairs (score >= 0.8) — negatives come from the batch.
 
 Why fine-tune:
     The pretrained model was trained on general English corpora.
@@ -18,11 +30,13 @@ a held-out evaluation set — this is the key experimental result
 for the notebook and pitch.
 
 Architecture note:
-    CosineSimilarityLoss trains the model by:
-        1. Encoding sentence_a and sentence_b through the transformer
-        2. Computing cosine similarity between the two embeddings
-        3. Minimizing MSE between predicted similarity and target score
-    
+    MultipleNegativesRankingLoss trains the model by:
+        1. Encoding all (anchor, positive) pairs in the batch
+        2. Computing cosine similarity matrix between all anchors and positives
+        3. Treating diagonal as positive, off-diagonal as negatives
+        4. Minimizing cross-entropy loss (i.e. the correct positive should
+           have the highest similarity score for each anchor)
+
     The transformer weights are updated via backprop through the
     mean pooling and normalization layers all the way to the
     attention heads — this is real fine-tuning, not just a linear head.
@@ -36,10 +50,11 @@ import math
 import torch
 import numpy as np
 import wandb
+from collections import Counter
 from typing import List, Tuple, Optional
 from torch.utils.data import DataLoader
 from sentence_transformers import SentenceTransformer, InputExample
-from sentence_transformers.losses import CosineSimilarityLoss
+from sentence_transformers.losses import MultipleNegativesRankingLoss
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
 from src.mlb_rag.pair_generator import SentencePair, build_finetuning_dataset
@@ -54,12 +69,13 @@ FINETUNED_MODEL_PATH = "/var/tmp/prj004/checkpoints/mlb-minilm-finetuned"
 
 FINETUNE_CONFIG = {
     "base_model": BASE_MODEL,
-    "num_epochs": 4,
+    "num_epochs": 10,
     "batch_size": 32,
     "warmup_ratio": 0.1,
-    "learning_rate": 2e-5,        # lower LR for fine-tuning — don't destroy pretrained weights
+    "learning_rate": 5e-6,        # reduced from 2e-5 — prevents pretrained weight destruction
     "eval_split": 0.15,
     "seed": 42,
+    "loss": "MultipleNegativesRankingLoss",
 }
 
 
@@ -67,8 +83,8 @@ FINETUNE_CONFIG = {
 
 def pairs_to_input_examples(pairs: List[SentencePair]) -> List[InputExample]:
     """
-    Convert SentencePairs to sentence-transformers InputExample format.
-    CosineSimilarityLoss expects: InputExample(texts=[a, b], label=float)
+    Convert SentencePairs to InputExample format with similarity scores.
+    Used for the EmbeddingSimilarityEvaluator on the val set.
     """
     return [
         InputExample(texts=[p.sentence_a, p.sentence_b], label=p.score)
@@ -76,10 +92,27 @@ def pairs_to_input_examples(pairs: List[SentencePair]) -> List[InputExample]:
     ]
 
 
+def pairs_to_ranking_examples(pairs: List[SentencePair]) -> List[InputExample]:
+    """
+    Convert only POSITIVE pairs to InputExample format for
+    MultipleNegativesRankingLoss. Negatives come from the batch automatically.
+
+    Only uses pairs with score >= 0.8 (paraphrase pairs).
+    Hard negatives and true negatives are handled implicitly by the loss
+    function — any two different items in the batch act as negatives for
+    each other, which is more effective than explicit negative pairs.
+    """
+    positive_pairs = [p for p in pairs if p.score >= 0.8]
+    return [
+        InputExample(texts=[p.sentence_a, p.sentence_b])
+        for p in positive_pairs
+    ]
+
+
 def train_val_split(
-    pairs: List[SentencePair],
-    val_ratio: float = 0.15,
-    seed: int = 42
+        pairs: List[SentencePair],
+        val_ratio: float = 0.15,
+        seed: int = 42
 ) -> Tuple[List[SentencePair], List[SentencePair]]:
     """Split pairs into train/val, stratified by pair_type."""
     from collections import defaultdict
@@ -108,7 +141,7 @@ class RetrievalEvaluator:
     """
     Measures retrieval quality before and after fine-tuning.
 
-    This is the key experimental result for your notebook:
+    This is the key experimental result for the notebook:
         - Build a small test corpus of MLB chunks
         - For each query, check if the top-1 retrieved chunk is correct
         - Compare pre-trained vs fine-tuned hit rates
@@ -153,36 +186,43 @@ class RetrievalEvaluator:
         """
         store = build_vector_store(chunks, embedder=embedder, save=False)
         hits = 0
+        details = []
 
         for tc in self.test_cases:
             results = query_store(tc["query"], store, embedder, top_k=1)
             if not results:
+                details.append((tc["query"], "NO RESULT", False))
                 continue
             top_chunk, score = results[0]
             text_lower = top_chunk.text.lower()
 
-            # Check if top result contains relevant keywords
             relevant_hit = any(kw in text_lower for kw in tc["relevant_keywords"])
             irrelevant_hit = any(kw in text_lower for kw in tc["irrelevant_keywords"])
+            correct = relevant_hit and not irrelevant_hit
 
-            if relevant_hit and not irrelevant_hit:
+            if correct:
                 hits += 1
+            details.append((tc["query"], top_chunk.text[:60], correct))
 
         precision_at_1 = hits / len(self.test_cases)
         print(f"  [{label}] Precision@1: {precision_at_1:.2f} ({hits}/{len(self.test_cases)} queries)")
+        for query, result, correct in details:
+            mark = "✓" if correct else "✗"
+            print(f"    {mark} '{query[:35]}' → '{result[:50]}'")
         return precision_at_1
 
 
 # ── Fine-Tuning Pipeline ───────────────────────────────────────────────────────
 
 def finetune_embedding_model(
-    pairs: List[SentencePair] = None,
-    config: dict = None,
-    use_wandb: bool = True,
-    chunks_for_eval=None,
+        pairs: List[SentencePair] = None,
+        config: dict = None,
+        use_wandb: bool = True,
+        chunks_for_eval=None,
 ) -> SentenceTransformer:
     """
-    Fine-tune all-MiniLM-L6-v2 on baseball sentence pairs.
+    Fine-tune all-MiniLM-L6-v2 on baseball sentence pairs using
+    MultipleNegativesRankingLoss with per-epoch W&B logging.
 
     Args:
         pairs: Training pairs. Generates default dataset if None.
@@ -201,16 +241,36 @@ def finetune_embedding_model(
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"\n[FineTune] Device: {device}")
     print(f"[FineTune] Base model: {config['base_model']}")
+    print(f"[FineTune] Loss: {config.get('loss', 'MultipleNegativesRankingLoss')}")
     print(f"[FineTune] Total pairs: {len(pairs)}")
 
-    # W&B init
+    # ── Dataset stats ──────────────────────────────────────────────────────────
+    type_counts = Counter(p.pair_type for p in pairs)
+    n_positive = sum(1 for p in pairs if p.score >= 0.8)
+    n_hard_neg = sum(1 for p in pairs if 0.1 <= p.score < 0.4)
+    n_true_neg = sum(1 for p in pairs if p.score < 0.1)
+
+    print(f"\n[FineTune] Dataset composition:")
+    print(f"  Positive pairs (score >= 0.8): {n_positive}")
+    print(f"  Hard negatives (0.1-0.4):      {n_hard_neg}")
+    print(f"  True negatives (< 0.1):        {n_true_neg}")
+
+    # ── W&B init ───────────────────────────────────────────────────────────────
     run = None
     if use_wandb:
         run = wandb.init(
             project="mlb-rag",
-            name=f"embedding-finetune-ep{config['num_epochs']}-bs{config['batch_size']}",
+            name=f"mnrl-ep{config['num_epochs']}-lr{config['learning_rate']:.0e}-bs{config['batch_size']}",
             config=config
         )
+        # Log dataset stats immediately so every run has them
+        run.log({
+            "data/total_pairs": len(pairs),
+            "data/n_positive": n_positive,
+            "data/n_hard_neg": n_hard_neg,
+            "data/n_true_neg": n_true_neg,
+            **{f"data/type_{k}": v for k, v in type_counts.items()},
+        })
 
     # ── Baseline evaluation ────────────────────────────────────────────────────
     evaluator = RetrievalEvaluator()
@@ -222,14 +282,18 @@ def finetune_embedding_model(
     baseline_score = evaluator.evaluate(baseline_embedder, chunks_for_eval, label="pretrained")
 
     if run:
-        run.log({"retrieval/precision_at_1_pretrained": baseline_score})
+        run.log({"retrieval/precision_at_1_pretrained": baseline_score, "epoch": 0})
 
     # ── Data preparation ───────────────────────────────────────────────────────
     train_pairs, val_pairs = train_val_split(pairs, val_ratio=config["eval_split"])
-    print(f"\n[FineTune] Train pairs: {len(train_pairs)}, Val pairs: {len(val_pairs)}")
+    print(f"\n[FineTune] Train: {len(train_pairs)} pairs, Val: {len(val_pairs)} pairs")
 
-    train_examples = pairs_to_input_examples(train_pairs)
+    # For training: only positive pairs (MNRL handles negatives from batch)
+    train_examples = pairs_to_ranking_examples(train_pairs)
+    # For validation scoring: all pairs with scores (Spearman correlation)
     val_examples = pairs_to_input_examples(val_pairs)
+
+    print(f"[FineTune] Positive training examples: {len(train_examples)}")
 
     train_dataloader = DataLoader(
         train_examples,
@@ -240,21 +304,57 @@ def finetune_embedding_model(
     # ── Model + Loss ───────────────────────────────────────────────────────────
     model = SentenceTransformer(config["base_model"], device=device)
 
-    # CosineSimilarityLoss: trains by minimizing MSE between
-    # cosine_sim(embed_a, embed_b) and target score
-    train_loss = CosineSimilarityLoss(model)
+    # MultipleNegativesRankingLoss:
+    # - Takes (anchor, positive) pairs
+    # - Treats all other positives in the batch as negatives for each anchor
+    # - Minimizes cross-entropy over cosine similarity matrix
+    # - Effective batch size = batch_size^2 negative pairs
+    train_loss = MultipleNegativesRankingLoss(model)
 
-    # Sentence-transformers evaluator for val set
+    # Val evaluator: Spearman correlation between predicted and target scores
     val_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
         val_examples,
         name="mlb-val"
     )
+
+    # ── W&B callback (per-epoch logging) ──────────────────────────────────────
+    epoch_counter = [0]  # mutable container for closure
+
+    def wandb_callback(val_score, epoch, steps):
+        """Called by sentence-transformers after each epoch evaluation."""
+        epoch_counter[0] = epoch
+
+        log_dict = {
+            "epoch": epoch,
+            "val/spearman": val_score,
+        }
+
+        # Retrieval eval every 2 epochs (more expensive)
+        if epoch % 2 == 0 or epoch == config["num_epochs"]:
+            ft_embedder = MLBEmbedder(
+                model_name=FINETUNED_MODEL_PATH,
+                device=device
+            )
+            p_at_1 = evaluator.evaluate(
+                ft_embedder, chunks_for_eval,
+                label=f"epoch_{epoch}"
+            )
+            log_dict["retrieval/precision_at_1"] = p_at_1
+            log_dict["retrieval/improvement_vs_baseline"] = p_at_1 - baseline_score
+
+        if run:
+            run.log(log_dict)
+
+        print(f"  Epoch {epoch:2d} | val_spearman={val_score:.4f}"
+              + (f" | P@1={log_dict.get('retrieval/precision_at_1', '—')}"
+                 if "retrieval/precision_at_1" in log_dict else ""))
 
     # ── Training ───────────────────────────────────────────────────────────────
     warmup_steps = math.ceil(
         len(train_dataloader) * config["num_epochs"] * config["warmup_ratio"]
     )
     print(f"[FineTune] Warmup steps: {warmup_steps}")
+    print(f"[FineTune] Steps per epoch: {len(train_dataloader)}")
     print(f"[FineTune] Starting fine-tuning for {config['num_epochs']} epochs...\n")
 
     os.makedirs(FINETUNED_MODEL_PATH, exist_ok=True)
@@ -268,12 +368,16 @@ def finetune_embedding_model(
         output_path=FINETUNED_MODEL_PATH,
         save_best_model=True,
         show_progress_bar=True,
+        callback=wandb_callback,
+        evaluation_steps=len(train_dataloader),  # eval every epoch
     )
 
-    # ── Post fine-tuning evaluation ────────────────────────────────────────────
-    print("\n[FineTune] Post fine-tuning retrieval quality:")
+    # ── Final evaluation ───────────────────────────────────────────────────────
+    print("\n[FineTune] Final retrieval quality (best checkpoint):")
     finetuned_embedder = MLBEmbedder(model_name=FINETUNED_MODEL_PATH, device=device)
-    finetuned_score = evaluator.evaluate(finetuned_embedder, chunks_for_eval, label="finetuned")
+    finetuned_score = evaluator.evaluate(
+        finetuned_embedder, chunks_for_eval, label="finetuned_final"
+    )
 
     improvement = finetuned_score - baseline_score
     print(f"\n[FineTune] Retrieval improvement: {improvement:+.2f} "
@@ -282,7 +386,7 @@ def finetune_embedding_model(
     if run:
         run.log({
             "retrieval/precision_at_1_finetuned": finetuned_score,
-            "retrieval/improvement": improvement,
+            "retrieval/final_improvement": improvement,
         })
         run.finish()
 
@@ -292,19 +396,15 @@ def finetune_embedding_model(
 # ── Comparison Utility ─────────────────────────────────────────────────────────
 
 def compare_embeddings(
-    query: str,
-    sentences: List[str],
-    pretrained_path: str = BASE_MODEL,
-    finetuned_path: str = FINETUNED_MODEL_PATH,
-    device: str = None
+        query: str,
+        sentences: List[str],
+        pretrained_path: str = BASE_MODEL,
+        finetuned_path: str = FINETUNED_MODEL_PATH,
+        device: str = None
 ) -> None:
     """
     Visual comparison of cosine similarities before and after fine-tuning.
-    Great for notebook demonstrations — shows concretely what changed.
-
-    Args:
-        query: The reference sentence.
-        sentences: List of sentences to compare against the query.
+    Great for notebook demonstrations.
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -314,11 +414,9 @@ def compare_embeddings(
 
     q_pre = pre_model.embed([query], show_progress=False)
     q_ft = ft_model.embed([query], show_progress=False)
-
     s_pre = pre_model.embed(sentences, show_progress=False)
     s_ft = ft_model.embed(sentences, show_progress=False)
 
-    # Cosine similarity (embeddings are L2-normalized, so dot product = cosine)
     sim_pre = (q_pre @ s_pre.T)[0]
     sim_ft = (q_ft @ s_ft.T)[0]
 
@@ -348,12 +446,24 @@ if __name__ == "__main__":
         chunks = ingest_mlb_data(days_back=3)
         if not chunks:
             chunks = get_mock_chunks()
-    except:
+    except Exception:
         chunks = get_mock_chunks()
 
     model = finetune_embedding_model(
         pairs=pairs,
         use_wandb=True,
         chunks_for_eval=chunks,
-        config={**FINETUNE_CONFIG, "num_epochs": 4, "learning_rate": 2e-5}
+        config={**FINETUNE_CONFIG, "num_epochs": 10, "learning_rate": 5e-6}
+    )
+
+    # Show before/after comparison
+    compare_embeddings(
+        query="close one-run game late comeback",
+        sentences=[
+            "Yankees edged Red Sox by 1 run, winning 3-2.",
+            "Dodgers dominated Giants 12-1 in a blowout.",
+            "Braves outlasted Mets 4-3 in 11 innings.",
+            "AL East standings: Yankees lead at 88-74.",
+            "Pitcher struck out 14 batters in dominant outing.",
+        ]
     )
