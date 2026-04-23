@@ -163,7 +163,7 @@ def load_classifier(
         print(f"[Reranker] Checkpoint not found at {checkpoint_path}, skipping reranker.")
         return None
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model_cfg = checkpoint.get("model_config", {})
 
     clf = TrendClassifierMLP(
