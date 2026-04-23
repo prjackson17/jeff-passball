@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 
-from src.mlb_rag.historical_data import extract_game_features
+from src.mlb_rag.historical_data import extract_game_features, GameFeatures
 
 
 # ── Base URL ──────────────────────────────────────────────────────────────────
@@ -213,18 +213,18 @@ def build_game_recap_chunk(game: Dict) -> Optional[MLBChunk]:
 
         full_text = outcome_text + inning_summary + pitcher_text
 
-        # Compute game features for classifier reranking
+        # Inject game features into metadata for classifier reranking
         game_feats = extract_game_features(game)
         feat_dict = {}
         if game_feats is not None:
-            feat_dict = {k: v for k, v in zip(game_feats.feature_names(), game_feats.to_numpy().tolist())}
+            feat_dict = dict(zip(game_feats.feature_names(), game_feats.to_numpy().tolist()))
 
         return MLBChunk(
             text=full_text.strip(),
             metadata={
                 "game_pk": game_pk,
                 "status": status,
-                **feat_dict,          # injects all 15 features if available
+                **feat_dict,
             },
             chunk_type="game_recap"
         )
