@@ -17,12 +17,12 @@ import requests
 import json
 from datetime import datetime
 from typing import List, Tuple, Optional
-
 import torch
 import numpy as np
 
 from src.mlb_rag.data_ingestion import MLBChunk
 from src.mlb_rag.embedder import MLBVectorStore, MLBEmbedder, query_store
+from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 
 
 # ── Claude API ─────────────────────────────────────────────────────────────────
@@ -157,7 +157,6 @@ def load_classifier(
     Load the trained TrendClassifierMLP from checkpoint.
     Returns None (gracefully) if checkpoint not found.
     """
-    from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 
     if not os.path.exists(checkpoint_path):
         print(f"[Reranker] Checkpoint not found at {checkpoint_path}, skipping reranker.")
