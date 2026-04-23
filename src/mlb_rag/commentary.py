@@ -84,24 +84,16 @@ def build_context_string(results: List[Tuple[MLBChunk, float]]) -> str:
 # ── Classifier Reranker ────────────────────────────────────────────────────────
 
 def _extract_features_from_chunk(chunk: MLBChunk) -> Optional[np.ndarray]:
-    """
-    Extract the 15 GameFeatures from a chunk's metadata for classifier scoring.
-    Returns None if the chunk doesn't carry game features (e.g. standings chunks).
-    """
     meta = getattr(chunk, "metadata", None)
     if meta is None:
         return None
-
-    # Feature order must match GameFeatures / auto_labeler field order
-    FEATURE_KEYS = [
-        "run_diff", "total_runs", "is_extra_innings", "is_shutout",
-        "winning_margin_pct", "home_team_won", "is_walk_off",
-        "pitcher_k_rate", "hr_hit", "is_blowout", "is_one_run_game",
-        "late_lead_change", "team_on_win_streak", "team_on_lose_streak",
-        "division_game",
-    ]
+    from src.mlb_rag.historical_data import GameFeatures
+    keys = GameFeatures.feature_names()
+    # Only score this chunk if it has game features (not standings chunks)
+    if not any(k in meta for k in keys):
+        return None
     try:
-        feats = [float(meta.get(k, 0.0)) for k in FEATURE_KEYS]
+        feats = [float(meta.get(k, 0.0)) for k in keys]
         return np.array(feats, dtype=np.float32)
     except (TypeError, ValueError):
         return None
