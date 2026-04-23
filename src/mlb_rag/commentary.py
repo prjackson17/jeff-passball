@@ -165,11 +165,13 @@ def load_classifier(
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model_cfg = checkpoint.get("model_config", {})
 
-    clf = TrendClassifierMLP(
+    config = ClassifierConfig(
         input_dim=model_cfg.get("input_dim", 15),
-        hidden_dims=model_cfg.get("hidden_dims", [64, 32]),
+        hidden_units=model_cfg.get("hidden_units", [64, 32]),
         dropout=model_cfg.get("dropout", 0.3),
+        use_batch_norm=model_cfg.get("use_batch_norm", True),
     )
+    clf = TrendClassifierMLP(config)
     clf.load_state_dict(checkpoint["model_state_dict"])
     clf.to(device)
     clf.eval()
