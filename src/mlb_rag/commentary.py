@@ -27,7 +27,7 @@ from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 
 # ── Claude API ─────────────────────────────────────────────────────────────────
 
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+CLAUDE_MODEL = "claude-sonnet-4-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 
