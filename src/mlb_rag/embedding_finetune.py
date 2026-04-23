@@ -431,7 +431,7 @@ def finetune_embedding_model(
                     "retrieval/improvement_vs_baseline": p_at_1 - baseline_score,
                 })
 
-    # ── Training ───────────────────────────────────────────────────────────────
+    # ── Training with manual epoch tracking ────────────────────────────────────
     warmup_steps = math.ceil(
         len(train_dataloader) * config["num_epochs"] * config["warmup_ratio"]
     )
@@ -440,6 +440,37 @@ def finetune_embedding_model(
     print(f"[FineTune] Starting fine-tuning for {config['num_epochs']} epochs...\n")
 
     os.makedirs(FINETUNED_MODEL_PATH, exist_ok=True)
+
+    # Patch wandb into the retrieval callback since trainer_kwargs not available
+    def full_callback(val_score, epoch, steps):
+        """Per-epoch callback — logs val Spearman + retrieval P@1."""
+        epoch_int = int(epoch)
+
+        log_dict = {
+            "epoch": epoch_int,
+            "val/spearman": float(val_score),
+            "train/step": steps,
+        }
+
+        # Retrieval eval every 2 epochs
+        if epoch_int % 2 == 0 or epoch_int == config["num_epochs"]:
+            ft_embedder = MLBEmbedder(
+                model_name=FINETUNED_MODEL_PATH,
+                device=device
+            )
+            p_at_1 = evaluator.evaluate(
+                ft_embedder, chunks_for_eval,
+                label=f"epoch_{epoch_int}"
+            )
+            log_dict["retrieval/precision_at_1"] = p_at_1
+            log_dict["retrieval/improvement_vs_baseline"] = p_at_1 - baseline_score
+
+        if run:
+            run.log(log_dict)
+
+        print(f"  Epoch {epoch_int:2d} | val_spearman={float(val_score):.4f}"
+              + (f" | P@1={log_dict.get('retrieval/precision_at_1', '—')}"
+                 if "retrieval/precision_at_1" in log_dict else ""))
 
     model.fit(
         train_objectives=[(train_dataloader, train_loss)],
@@ -450,9 +481,8 @@ def finetune_embedding_model(
         output_path=FINETUNED_MODEL_PATH,
         save_best_model=True,
         show_progress_bar=True,
-        callback=retrieval_callback,
-        evaluation_steps=len(train_dataloader),  # eval every epoch
-        trainer_kwargs={"callbacks": [detailed_cb]},
+        callback=full_callback,
+        evaluation_steps=len(train_dataloader),
     )
 
     # ── Final evaluation ───────────────────────────────────────────────────────
