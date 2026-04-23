@@ -153,29 +153,19 @@ def load_classifier(
         checkpoint_path: str = "/var/tmp/prj004/checkpoints/trend_classifier.pt",
         device: str = "cpu",
 ):
-    """
-    Load the trained TrendClassifierMLP from checkpoint.
-    Returns None (gracefully) if checkpoint not found.
-    """
+    from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 
     if not os.path.exists(checkpoint_path):
         print(f"[Reranker] Checkpoint not found at {checkpoint_path}, skipping reranker.")
         return None
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    model_cfg = checkpoint.get("model_config", {})
-
-    config = ClassifierConfig(
-        input_dim=model_cfg.get("input_dim", 15),
-        hidden_units=model_cfg.get("hidden_units", [64, 32]),
-        dropout=model_cfg.get("dropout", 0.3),
-        use_batch_norm=model_cfg.get("use_batch_norm", True),
-    )
+    config = checkpoint["config"]
     clf = TrendClassifierMLP(config)
-    clf.load_state_dict(checkpoint["model_state_dict"])
+    clf.load_state_dict(checkpoint["model_state"])
     clf.to(device)
     clf.eval()
-    print(f"[Reranker] Loaded classifier (val F1={checkpoint.get('best_val_f1', '?'):.4f})")
+    print(f"[Reranker] Loaded classifier (input_dim={config.input_dim}, hidden={config.hidden_units})")
     return clf
 
 
