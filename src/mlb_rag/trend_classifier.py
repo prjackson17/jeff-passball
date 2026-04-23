@@ -402,8 +402,8 @@ def score_chunks_with_classifier(
 # ── Quick Test ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from historical_data import get_mock_features
-    from auto_labeler import label_dataset, label_distribution
+    from src.mlb_rag.historical_data import get_mock_features
+    from src.mlb_rag.auto_labeler import label_dataset, label_distribution
 
     print("=== Trend Classifier Training Test ===\n")
 
