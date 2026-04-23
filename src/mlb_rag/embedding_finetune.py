@@ -56,6 +56,7 @@ from torch.utils.data import DataLoader
 from sentence_transformers import SentenceTransformer, InputExample
 from sentence_transformers.losses import MultipleNegativesRankingLoss
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
+from transformers import TrainerCallback, TrainerState, TrainerControl, TrainingArguments
 
 from src.mlb_rag.pair_generator import SentencePair, build_finetuning_dataset
 from src.mlb_rag.embedder import MLBEmbedder, MLBVectorStore, build_vector_store, query_store
@@ -212,6 +213,100 @@ class RetrievalEvaluator:
         return precision_at_1
 
 
+# ── W&B Detailed Callback ──────────────────────────────────────────────────────
+
+class WandbDetailedCallback(TrainerCallback):
+    """
+    Custom HuggingFace TrainerCallback for detailed per-step and per-epoch
+    W&B logging during sentence-transformer fine-tuning.
+
+    Logs:
+        train/loss          — per logging step (raw loss from MNRL)
+        train/learning_rate — per logging step (LR schedule curve)
+        train/epoch_avg_loss — smoothed average loss per epoch
+        val/spearman        — Spearman correlation with target scores (per epoch)
+        val/pearson         — Pearson correlation (per epoch)
+        val/loss            — validation loss if available
+    """
+
+    def __init__(self, run):
+        self.run = run
+        self.step_losses = []
+        self.current_epoch = 0
+
+    def on_log(self, args: TrainingArguments, state: TrainerState,
+               control: TrainerControl, logs=None, **kwargs):
+        """Fires every logging step — captures train loss, LR, and val metrics."""
+        if logs is None or self.run is None:
+            return
+
+        log_dict = {"train/global_step": state.global_step}
+
+        # Training metrics
+        if "loss" in logs:
+            log_dict["train/loss"] = logs["loss"]
+            self.step_losses.append(logs["loss"])
+
+        if "learning_rate" in logs:
+            log_dict["train/learning_rate"] = logs["learning_rate"]
+
+        # Grad norm if available — helps diagnose exploding/vanishing gradients
+        if "grad_norm" in logs:
+            log_dict["train/grad_norm"] = logs["grad_norm"]
+
+        # Val metrics come through logs after each evaluation step
+        if "eval_mlb-val_spearman_cosine" in logs:
+            log_dict["val/spearman"] = float(logs["eval_mlb-val_spearman_cosine"])
+        if "eval_mlb-val_pearson_cosine" in logs:
+            log_dict["val/pearson"] = float(logs["eval_mlb-val_pearson_cosine"])
+        if "eval_mlb-val_spearman_manhattan" in logs:
+            log_dict["val/spearman_manhattan"] = float(logs["eval_mlb-val_spearman_manhattan"])
+        if "eval_loss" in logs:
+            log_dict["val/loss"] = logs["eval_loss"]
+        if "eval_runtime" in logs:
+            log_dict["val/runtime_s"] = logs["eval_runtime"]
+
+        self.run.log(log_dict)
+
+    def on_epoch_end(self, args: TrainingArguments, state: TrainerState,
+                     control: TrainerControl, **kwargs):
+        """Fires at end of each epoch — logs epoch-level summary stats."""
+        if self.run is None:
+            return
+
+        self.current_epoch = int(state.epoch)
+
+        if self.step_losses:
+            # Average loss over this epoch's steps
+            steps_per_epoch = max(1, len(self.step_losses) // max(self.current_epoch, 1))
+            epoch_steps = self.step_losses[-steps_per_epoch:]
+            avg_loss = sum(epoch_steps) / len(epoch_steps)
+
+            self.run.log({
+                "epoch": self.current_epoch,
+                "train/epoch_avg_loss": avg_loss,
+                "train/epoch_min_loss": min(epoch_steps),
+                "train/epoch_max_loss": max(epoch_steps),
+            })
+
+            print(f"  [Epoch {self.current_epoch}] "
+                  f"avg_loss={avg_loss:.4f} "
+                  f"min={min(epoch_steps):.4f} "
+                  f"max={max(epoch_steps):.4f}")
+
+    def on_train_end(self, args: TrainingArguments, state: TrainerState,
+                     control: TrainerControl, **kwargs):
+        """Fires when training completes — log final summary."""
+        if self.run is None or not self.step_losses:
+            return
+
+        self.run.log({
+            "train/final_loss": self.step_losses[-1],
+            "train/total_steps": state.global_step,
+            "train/total_epochs": self.current_epoch,
+        })
+
+
 # ── Fine-Tuning Pipeline ───────────────────────────────────────────────────────
 
 def finetune_embedding_model(
@@ -222,7 +317,7 @@ def finetune_embedding_model(
 ) -> SentenceTransformer:
     """
     Fine-tune all-MiniLM-L6-v2 on baseball sentence pairs using
-    MultipleNegativesRankingLoss with per-epoch W&B logging.
+    MultipleNegativesRankingLoss with detailed per-step W&B logging.
 
     Args:
         pairs: Training pairs. Generates default dataset if None.
@@ -263,7 +358,6 @@ def finetune_embedding_model(
             name=f"mnrl-ep{config['num_epochs']}-lr{config['learning_rate']:.0e}-bs{config['batch_size']}",
             config=config
         )
-        # Log dataset stats immediately so every run has them
         run.log({
             "data/total_pairs": len(pairs),
             "data/n_positive": n_positive,
@@ -288,12 +382,10 @@ def finetune_embedding_model(
     train_pairs, val_pairs = train_val_split(pairs, val_ratio=config["eval_split"])
     print(f"\n[FineTune] Train: {len(train_pairs)} pairs, Val: {len(val_pairs)} pairs")
 
-    # For training: only positive pairs (MNRL handles negatives from batch)
     train_examples = pairs_to_ranking_examples(train_pairs)
-    # For validation scoring: all pairs with scores (Spearman correlation)
     val_examples = pairs_to_input_examples(val_pairs)
 
-    print(f"[FineTune] Positive training examples: {len(train_examples)}")
+    print(f"[FineTune] Positive training examples (MNRL): {len(train_examples)}")
 
     train_dataloader = DataLoader(
         train_examples,
@@ -311,25 +403,18 @@ def finetune_embedding_model(
     # - Effective batch size = batch_size^2 negative pairs
     train_loss = MultipleNegativesRankingLoss(model)
 
-    # Val evaluator: Spearman correlation between predicted and target scores
+    # Val evaluator: Spearman/Pearson correlation between predicted and target scores
     val_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
         val_examples,
         name="mlb-val"
     )
 
-    # ── W&B callback (per-epoch logging) ──────────────────────────────────────
-    epoch_counter = [0]  # mutable container for closure
+    # ── Callbacks ──────────────────────────────────────────────────────────────
+    detailed_cb = WandbDetailedCallback(run=run)
 
-    def wandb_callback(val_score, epoch, steps):
+    # Retrieval P@1 callback (runs every 2 epochs — more expensive)
+    def retrieval_callback(val_score, epoch, steps):
         """Called by sentence-transformers after each epoch evaluation."""
-        epoch_counter[0] = epoch
-
-        log_dict = {
-            "epoch": epoch,
-            "val/spearman": val_score,
-        }
-
-        # Retrieval eval every 2 epochs (more expensive)
         if int(epoch) % 2 == 0 or int(epoch) == config["num_epochs"]:
             ft_embedder = MLBEmbedder(
                 model_name=FINETUNED_MODEL_PATH,
@@ -339,15 +424,12 @@ def finetune_embedding_model(
                 ft_embedder, chunks_for_eval,
                 label=f"epoch_{int(epoch)}"
             )
-            log_dict["retrieval/precision_at_1"] = p_at_1
-            log_dict["retrieval/improvement_vs_baseline"] = p_at_1 - baseline_score
-
-        if run:
-            run.log(log_dict)
-
-        print(f"  Epoch {int(epoch):2d} | val_spearman={val_score:.4f}"
-              + (f" | P@1={log_dict.get('retrieval/precision_at_1', '—')}"
-                 if "retrieval/precision_at_1" in log_dict else ""))
+            if run:
+                run.log({
+                    "epoch": int(epoch),
+                    "retrieval/precision_at_1": p_at_1,
+                    "retrieval/improvement_vs_baseline": p_at_1 - baseline_score,
+                })
 
     # ── Training ───────────────────────────────────────────────────────────────
     warmup_steps = math.ceil(
@@ -368,8 +450,9 @@ def finetune_embedding_model(
         output_path=FINETUNED_MODEL_PATH,
         save_best_model=True,
         show_progress_bar=True,
-        callback=wandb_callback,
+        callback=retrieval_callback,
         evaluation_steps=len(train_dataloader),  # eval every epoch
+        trainer_kwargs={"callbacks": [detailed_cb]},
     )
 
     # ── Final evaluation ───────────────────────────────────────────────────────
@@ -404,7 +487,7 @@ def compare_embeddings(
 ) -> None:
     """
     Visual comparison of cosine similarities before and after fine-tuning.
-    Great for notebook demonstrations.
+    Great for notebook demonstrations — shows concretely what changed.
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
