@@ -157,7 +157,7 @@ def load_classifier(
     Load the trained TrendClassifierMLP from checkpoint.
     Returns None (gracefully) if checkpoint not found.
     """
-    from src.mlb_rag.trend_classifier import TrendClassifierMLP
+    from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 
     if not os.path.exists(checkpoint_path):
         print(f"[Reranker] Checkpoint not found at {checkpoint_path}, skipping reranker.")
