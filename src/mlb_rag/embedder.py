@@ -56,7 +56,7 @@ class MLBEmbedder:
         self.device = device
         print(f"[Embedder] Loading {model_name} on {device}...")
         self.model = SentenceTransformer(model_name, device=device)
-        print(f"[Embedder] Model loaded. Embedding dim: {self.model.get_sentence_embedding_dimension()}")
+        print(f"[Embedder] Model loaded. Embedding dim: {self.model.get_embedding_dimension()}")
 
     def embed(self, texts: List[str], batch_size: int = 64, show_progress: bool = True) -> np.ndarray:
         """
