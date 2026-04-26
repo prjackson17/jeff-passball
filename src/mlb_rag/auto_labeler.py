@@ -30,12 +30,13 @@ from src.mlb_rag.historical_data import GameFeatures, features_to_dataframe
 THRESHOLDS = {
     "close_game_margin":     2,     # margin <= this → notable (1-run, 2-run games)
     "extra_innings":         True,  # any extra innings game → notable
-    "offensive_explosion":   12,    # total runs >= this → notable
+    "offensive_explosion":   14,    # total runs >= this → notable (raised from 12)
     "dominant_so":           11,    # winning pitcher SO >= this → notable
     "hr_barrage":            4,     # total HRs >= this → notable
     "shutout":               True,  # shutout → notable
-    "comeback":              True,  # lead change → notable (proxy for comeback)
     "blowout_margin":        8,     # margin >= this → notable (dominant win)
+    # "comeback" removed — had_lead_change fired on 77% of all games, making
+    # it useless as a signal and inflating the notable rate to 92%.
 }
 
 
@@ -59,9 +60,6 @@ def rule_hr_barrage(f: GameFeatures) -> bool:
 def rule_shutout(f: GameFeatures) -> bool:
     return f.is_shutout == 1.0
 
-def rule_comeback(f: GameFeatures) -> bool:
-    return f.had_lead_change == 1.0
-
 def rule_blowout(f: GameFeatures) -> bool:
     return f.margin >= THRESHOLDS["blowout_margin"]
 
@@ -74,7 +72,6 @@ RULES = {
     "dominant_pitching":   rule_dominant_pitching,
     "hr_barrage":          rule_hr_barrage,
     "shutout":             rule_shutout,
-    "comeback":            rule_comeback,
     "blowout":             rule_blowout,
 }
 
