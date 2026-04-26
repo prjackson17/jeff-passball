@@ -1,0 +1,41 @@
+[Historical] Fetching 2023 season (186 dates)...
+  Progress: 2023-03-30 (0/186 dates, 0 games so far)
+  Progress: 2023-04-29 (30/186 dates, 394 games so far)
+  Progress: 2023-05-29 (60/186 dates, 800 games so far)
+  Progress: 2023-06-28 (90/186 dates, 1189 games so far)
+  Progress: 2023-07-28 (120/186 dates, 1546 games so far)
+  Progress: 2023-08-27 (150/186 dates, 1950 games so far)
+  Progress: 2023-09-26 (180/186 dates, 2347 games so far)
+[Historical] Done. 2434 completed games extracted.
+[Historical] Fetching 2024 season (194 dates)...
+  Progress: 2024-03-20 (0/194 dates, 0 games so far)
+  Progress: 2024-04-19 (30/194 dates, 377 games so far)
+  Progress: 2024-05-19 (60/194 dates, 779 games so far)
+  Progress: 2024-06-18 (90/194 dates, 1176 games so far)
+  Progress: 2024-07-18 (120/194 dates, 1542 games so far)
+  Progress: 2024-08-17 (150/194 dates, 1928 games so far)
+  Progress: 2024-09-16 (180/194 dates, 2338 games so far)
+[Historical] Done. 2521 completed games extracted.
+[Historical] Fetching 2025 season (186 dates)...
+  Progress: 2025-03-27 (0/186 dates, 0 games so far)
+  Progress: 2025-04-26 (30/186 dates, 384 games so far)
+  Progress: 2025-05-26 (60/186 dates, 789 games so far)
+  Progress: 2025-06-25 (90/186 dates, 1185 games so far)
+  Progress: 2025-07-25 (120/186 dates, 1538 games so far)
+  Progress: 2025-08-24 (150/186 dates, 1943 games so far)
+  Progress: 2025-09-23 (180/186 dates, 2341 games so far)
+[Historical] Done. 2428 completed games extracted.
+
+[Historical] Combined total: 7383 games across 3 seasons
+[Save] Saved 7383 games to ./data/game_features_all.npz
+             game_pk   home_score  ...   is_shutout  had_lead_change
+count    7383.000000  7383.000000  ...  7383.000000      7383.000000
+mean   746973.573073     4.494921  ...     0.130841         0.773127
+std     24281.629260     3.101476  ...     0.337235         0.418843
+min    716352.000000     0.000000  ...     0.000000         0.000000
+25%    718194.500000     2.000000  ...     0.000000         1.000000
+50%    746053.000000     4.000000  ...     0.000000         1.000000
+75%    776716.500000     6.000000  ...     0.000000         1.000000
+max    778566.000000    22.000000  ...     1.000000         1.000000
+
+[8 rows x 16 columns]
