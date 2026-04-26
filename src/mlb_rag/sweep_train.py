@@ -122,7 +122,7 @@ SWEEP_CONFIG = {
 
 def _load_data():
     path = os.path.abspath(DATA_PATH)
-    X, _, _ = load_features(path)
+    X, _, dates = load_features(path)
     feature_names = GameFeatures.feature_names()
 
     def _row_to_gf(row):
@@ -146,8 +146,10 @@ def _load_data():
             had_lead_change=row[fn.index("had_lead_change")],
         )
 
-    y = np.array([label_game(_row_to_gf(row)) for row in X], dtype=np.int64)
-    return X, y
+    # min_rules=2: a game is notable only if 2+ rules co-occur.
+    # This prevents the MLP from trivially memorizing single-threshold rules.
+    y = np.array([label_game(_row_to_gf(row), min_rules=2) for row in X], dtype=np.int64)
+    return X, y, dates
 
 
 # ── Core training logic ────────────────────────────────────────────────────────
@@ -166,14 +168,29 @@ def _train(run: "wandb.sdk.wandb_run.Run") -> None:
         f"{'_wrs' if use_wrs else '_nowrs'}"
     )
 
-    X, y = _load_data()
+    X, y, dates = _load_data()
 
-    X_tv, X_test, y_tv, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_tv, y_tv, test_size=0.15, random_state=42, stratify=y_tv
-    )
+    # Temporal split: train on historical seasons, validate/test on recent seasons.
+    # This is more realistic than a random split — the model must generalize forward in time.
+    years = np.array([str(d)[:4] for d in dates])
+    train_mask = np.isin(years, ["2023", "2024"])
+    val_mask   = years == "2025"
+    test_mask  = years == "2026"
+
+    # Fall back to random split if any split is empty (e.g., 2026 data not yet fetched)
+    if train_mask.sum() == 0 or val_mask.sum() == 0:
+        X_tv, X_test, y_tv, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_tv, y_tv, test_size=0.15, random_state=42, stratify=y_tv
+        )
+        print("[Classifier] Warning: temporal split fallback — missing season data")
+    else:
+        X_train, y_train = X[train_mask], y[train_mask]
+        X_val,   y_val   = X[val_mask],   y[val_mask]
+        X_test  = X[test_mask] if test_mask.sum() > 0 else X_val
+        y_test  = y[test_mask] if test_mask.sum() > 0 else y_val
 
     clf_config = ClassifierConfig(
         hidden_units=hidden_units,
