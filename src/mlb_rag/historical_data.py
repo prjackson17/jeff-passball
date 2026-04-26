@@ -25,6 +25,7 @@ SEASON_DATES = {
     2023: ("2023-03-30", "2023-10-01"),
     2024: ("2024-03-20", "2024-09-29"),
     2025: ("2025-03-27", "2025-09-28"),
+    2026: ("2026-03-26", "2026-09-30"),
 }
 
 
@@ -265,29 +266,28 @@ def extract_game_features(game: dict) -> Optional[GameFeatures]:
 
 # ── Season Fetcher ─────────────────────────────────────────────────────────────
 
-def fetch_season(season: int = 2024, verbose: bool = True) -> List[GameFeatures]:
+def fetch_date_range(start: str, end: str, verbose: bool = True) -> List[GameFeatures]:
     """
-    Fetch all Final games for a full MLB season and extract features.
+    Fetch all Final games between two dates (inclusive) and extract features.
 
     Args:
-        season: Year to fetch (2024 or 2025).
+        start: 'YYYY-MM-DD' start date.
+        end:   'YYYY-MM-DD' end date (capped at yesterday — today's games aren't Final yet).
         verbose: Print progress.
 
     Returns:
         List of GameFeatures, one per completed game.
     """
-    if season not in SEASON_DATES:
-        raise ValueError(f"Season {season} not supported. Choose from {list(SEASON_DATES.keys())}")
+    yesterday = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    end = min(end, yesterday)  # never ask for games that haven't finished yet
 
-    start, end = SEASON_DATES[season]
     dates = _date_range(start, end)
-
     all_features = []
-    print(f"[Historical] Fetching {season} season ({len(dates)} dates)...")
+    print(f"[Historical] Fetching {start} → {end} ({len(dates)} dates)...")
 
     for i, date in enumerate(dates):
         if verbose and i % 30 == 0:
-            print(f"  Progress: {date} ({i}/{len(dates)} dates, {len(all_features)} games so far)")
+            print(f"  {date}  ({i}/{len(dates)} dates, {len(all_features)} games)")
 
         data = _get("/schedule", params={
             "sportId": 1,
@@ -298,22 +298,29 @@ def fetch_season(season: int = 2024, verbose: bool = True) -> List[GameFeatures]
         if not data or "dates" not in data or not data["dates"]:
             continue
 
-        games = data["dates"][0].get("games", [])
-        for game in games:
+        for game in data["dates"][0].get("games", []):
             features = extract_game_features(game)
             if features:
                 all_features.append(features)
 
-    print(f"[Historical] Done. {len(all_features)} completed games extracted.")
+    print(f"[Historical] Done. {len(all_features)} completed games.")
     return all_features
 
 
-def fetch_multiple_seasons(seasons: List[int] = [2023, 2024, 2025]) -> List[GameFeatures]:
+def fetch_season(season: int = 2024, verbose: bool = True) -> List[GameFeatures]:
+    """Fetch all Final games for a full MLB season."""
+    if season not in SEASON_DATES:
+        raise ValueError(f"Season {season} not in SEASON_DATES. Add it or use fetch_date_range().")
+    start, end = SEASON_DATES[season]
+    print(f"[Historical] Season {season}: {start} → {end}")
+    return fetch_date_range(start, end, verbose=verbose)
+
+
+def fetch_multiple_seasons(seasons: List[int] = [2023, 2024, 2025, 2026]) -> List[GameFeatures]:
     all_features = []
     for season in seasons:
-        features = fetch_season(season, verbose=True)
-        all_features.extend(features)
-    print(f"\n[Historical] Combined total: {len(all_features)} games across {len(seasons)} seasons")
+        all_features.extend(fetch_season(season, verbose=True))
+    print(f"\n[Historical] Combined total: {len(all_features)} games across {seasons}")
     return all_features
 
 
@@ -341,6 +348,51 @@ def save_features(features: List[GameFeatures], path: str = "./data/game_feature
 
     np.savez_compressed(path, X=X, game_pks=game_pks, dates=dates)
     print(f"[Save] Saved {len(features)} games to {path}")
+
+
+def append_features(
+    new_features: List[GameFeatures],
+    path: str = "./data/game_features_all.npz",
+) -> int:
+    """
+    Merge new_features into an existing .npz, deduplicating by game_pk.
+
+    Args:
+        new_features: Freshly fetched GameFeatures to add.
+        path:         Path to the existing .npz (created if absent).
+
+    Returns:
+        Number of new rows actually added (after deduplication).
+    """
+    if not new_features:
+        print("[Append] No new features to add.")
+        return 0
+
+    new_X    = np.stack([f.to_numpy() for f in new_features])
+    new_pks  = np.array([f.game_pk for f in new_features])
+    new_dates = np.array([f.date for f in new_features])
+
+    if os.path.exists(path):
+        old_X, old_pks, old_dates = load_features(path)
+        existing_pks = set(old_pks.tolist())
+
+        mask = np.array([pk not in existing_pks for pk in new_pks.tolist()])
+        added = int(mask.sum())
+
+        if added == 0:
+            print(f"[Append] All {len(new_features)} games already present — nothing added.")
+            return 0
+
+        X     = np.concatenate([old_X,    new_X[mask]],    axis=0)
+        pks   = np.concatenate([old_pks,  new_pks[mask]],  axis=0)
+        dates = np.concatenate([old_dates, new_dates[mask]], axis=0)
+    else:
+        X, pks, dates = new_X, new_pks, new_dates
+        added = len(new_features)
+
+    np.savez_compressed(path, X=X, game_pks=pks, dates=dates)
+    print(f"[Append] Added {added} new games → {len(pks)} total in {path}")
+    return added
 
 
 def load_features(path: str = "./data/game_features.npz") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -385,9 +437,64 @@ def get_mock_features(n: int = 500) -> List[GameFeatures]:
 
 
 if __name__ == "__main__":
-    features = fetch_multiple_seasons([2023, 2024, 2025])
-    if features:
-        os.makedirs("./data", exist_ok=True)
-        save_features(features, path="./data/game_features_all.npz")
-        df = features_to_dataframe(features)
-        print(df.describe())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MLB historical game feature fetcher")
+    group  = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--append", type=int, metavar="SEASON",
+        help="Fetch new games for SEASON and merge into game_features_all.npz. "
+             "Only fetches dates not already present.",
+    )
+    group.add_argument(
+        "--rebuild", action="store_true",
+        help="Re-fetch all seasons (2023-2026) and overwrite game_features_all.npz.",
+    )
+    group.add_argument(
+        "--range", nargs=2, metavar=("START", "END"),
+        help="Fetch a custom date range (YYYY-MM-DD YYYY-MM-DD) and append.",
+    )
+    parser.add_argument(
+        "--out", default="./data/game_features_all.npz",
+        help="Output .npz path (default: ./data/game_features_all.npz)",
+    )
+    args = parser.parse_args()
+
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+
+    if args.rebuild:
+        features = fetch_multiple_seasons([2023, 2024, 2025, 2026])
+        save_features(features, path=args.out)
+        print(features_to_dataframe(features).groupby(
+            lambda i: features[i].date[:4]
+        ).size().rename("games"))
+
+    elif args.append:
+        season = args.append
+        if season not in SEASON_DATES:
+            raise SystemExit(f"Season {season} not in SEASON_DATES: {list(SEASON_DATES.keys())}")
+
+        start, end = SEASON_DATES[season]
+
+        # Fast-forward start to day after the latest date already in the file for this season.
+        if os.path.exists(args.out):
+            _, _, existing_dates = load_features(args.out)
+            season_dates_in_file = sorted(
+                d for d in existing_dates.tolist() if str(d).startswith(str(season))
+            )
+            if season_dates_in_file:
+                latest = season_dates_in_file[-1]
+                next_day = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                if next_day > end:
+                    print(f"[Append] Already up to date through {latest}. Nothing to fetch.")
+                    raise SystemExit(0)
+                print(f"[Append] Latest {season} date on file: {latest}. Fetching {next_day} → {end}")
+                start = next_day
+
+        new_features = fetch_date_range(start, end)
+        append_features(new_features, path=args.out)
+
+    else:  # --range
+        start, end = args.range
+        new_features = fetch_date_range(start, end)
+        append_features(new_features, path=args.out)
