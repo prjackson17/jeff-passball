@@ -183,13 +183,18 @@ class TrendClassifierTrainer:
         avg_loss = total_loss / len(all_labels)
         accuracy = (all_preds == all_labels).mean()
 
-        # F1 for the positive (notable) class
-        tp = ((all_preds == 1) & (all_labels == 1)).sum()
-        fp = ((all_preds == 1) & (all_labels == 0)).sum()
-        fn = ((all_preds == 0) & (all_labels == 1)).sum()
-        f1 = (2 * tp) / (2 * tp + fp + fn + 1e-8)
+        # Macro F1: average of per-class F1 scores.
+        # Using notable-class F1 alone lets a model that predicts "notable"
+        # for everything score perfectly on an imbalanced dataset.
+        f1_per_class = []
+        for cls in [0, 1]:
+            tp = ((all_preds == cls) & (all_labels == cls)).sum()
+            fp = ((all_preds == cls) & (all_labels != cls)).sum()
+            fn = ((all_preds != cls) & (all_labels == cls)).sum()
+            f1_per_class.append((2 * tp) / (2 * tp + fp + fn + 1e-8))
+        macro_f1 = float(np.mean(f1_per_class))
 
-        return avg_loss, float(accuracy), float(f1)
+        return avg_loss, float(accuracy), macro_f1
 
     def fit(
         self,
@@ -292,7 +297,7 @@ class TrendClassifierTrainer:
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                     "val_accuracy": val_acc,
-                    "val_f1": val_f1,
+                    "val_macro_f1": val_f1,
                 })
 
             # Early stopping on val F1 (not accuracy — imbalanced dataset)
