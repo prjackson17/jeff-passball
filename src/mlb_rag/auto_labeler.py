@@ -78,52 +78,58 @@ RULES = {
 
 # ── Core Labeling Functions ────────────────────────────────────────────────────
 
-def label_game(f: GameFeatures, rules: Dict = None) -> int:
+def label_game(f: GameFeatures, rules: Dict = None, min_rules: int = 2) -> int:
     """
     Apply all rules to a single game. Returns 1 (notable) or 0 (routine).
 
     Args:
-        f: GameFeatures instance.
-        rules: Dict of rule_name → rule_fn. Defaults to RULES.
+        f:         GameFeatures instance.
+        rules:     Dict of rule_name → rule_fn. Defaults to RULES.
+        min_rules: Minimum number of rules that must fire to label a game notable.
+                   Default 2 requires co-occurrence (e.g. shutout + blowout, close +
+                   extra innings), which drops the notable rate to ~21% and prevents
+                   the MLP from trivially memorizing single-threshold rules.
 
     Returns:
-        1 if any rule fires, 0 otherwise.
+        1 if at least min_rules rules fire, 0 otherwise.
     """
     if rules is None:
         rules = RULES
-    return int(any(fn(f) for fn in rules.values()))
+    fired = sum(1 for fn in rules.values() if fn(f))
+    return int(fired >= min_rules)
 
 
-def label_game_with_reasons(f: GameFeatures) -> Tuple[int, List[str]]:
+def label_game_with_reasons(f: GameFeatures, min_rules: int = 2) -> Tuple[int, List[str]]:
     """
     Label a game and return which rules fired.
-    Useful for debugging and for generating rich LLM context.
 
     Returns:
         (label, list_of_fired_rule_names)
     """
     fired = [name for name, fn in RULES.items() if fn(f)]
-    label = 1 if fired else 0
+    label = int(len(fired) >= min_rules)
     return label, fired
 
 
 def label_dataset(
     features: List[GameFeatures],
-    rules: Dict = None
+    rules: Dict = None,
+    min_rules: int = 2,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Label a full list of GameFeatures.
 
     Args:
-        features: List of GameFeatures from historical_data.py
-        rules: Optional custom rule dict for ablation studies.
+        features:  List of GameFeatures from historical_data.py
+        rules:     Optional custom rule dict for ablation studies.
+        min_rules: Passed through to label_game.
 
     Returns:
         X: np.ndarray of shape (N, num_features), float32
         y: np.ndarray of shape (N,), int64 — binary labels
     """
-    X = np.stack([f.to_numpy() for f in features])          # (N, 15)
-    y = np.array([label_game(f, rules) for f in features],  # (N,)
+    X = np.stack([f.to_numpy() for f in features])
+    y = np.array([label_game(f, rules, min_rules=min_rules) for f in features],
                  dtype=np.int64)
     return X, y
 
