@@ -124,6 +124,16 @@ def _get(endpoint: str, params: dict = None) -> Optional[dict]:
         return None
 
 
+def fetch_game_editorial(game_pk: int) -> dict:
+    """Fetch the MLB.com journalist-written headline and summary for a game.
+
+    Returns the recap dict with 'headline' and 'blurb' keys, or {} if
+    no editorial content exists (e.g. very recent games, missing recaps).
+    """
+    data = _get(f"/game/{game_pk}/content") or {}
+    return data.get("editorial", {}).get("recap", {}).get("mlb", {})
+
+
 def _date_range(start: str, end: str) -> List[str]:
     """Generate list of 'YYYY-MM-DD' strings between start and end inclusive."""
     start_dt = datetime.strptime(start, "%Y-%m-%d")
@@ -239,6 +249,7 @@ def _build_recap_text(
     total_errors: float,
     home_so: float,
     away_so: float,
+    editorial: dict = {},
 ) -> str:
     """Build an enriched natural-language recap from already-extracted values."""
     teams = game.get("teams", {})
@@ -281,6 +292,13 @@ def _build_recap_text(
 
     if winning_so >= 8:
         text += f" The {winner} struck out {int(winning_so)} batters."
+
+    # Prepend MLB.com editorial headline + blurb when available
+    headline = editorial.get("headline", "")
+    blurb = (editorial.get("blurb", "") or "")[:300].strip()
+    if headline:
+        prefix = f"{headline} {blurb}".strip() if blurb else headline
+        text = prefix + "\n\n" + text
 
     return text.strip()
 
@@ -333,6 +351,7 @@ def extract_game_features(game: dict) -> Optional[GameFeatures]:
         home_score, away_score,
         innings_played, total_hits, total_errors,
         home_so, away_so,
+        editorial=game.get("_editorial", {}),
     )
 
     return GameFeatures(
@@ -399,7 +418,8 @@ def fetch_date_range(start: str, end: str, verbose: bool = True) -> List[GameFea
                 game_pk = game.get("gamePk")
                 direct_bs = _get(f"/game/{game_pk}/boxscore") or {}
                 game["_direct_boxscore"] = direct_bs
-                time.sleep(0.05)   # avoid rate-limiting (~2-3 hrs per full rebuild)
+                game["_editorial"] = fetch_game_editorial(game_pk)
+                time.sleep(0.1)   # 2 calls per game — avoid rate-limiting
             features = extract_game_features(game)
             if features:
                 all_features.append(features)

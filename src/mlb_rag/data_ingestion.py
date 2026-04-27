@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 
-from src.mlb_rag.historical_data import extract_game_features, GameFeatures
+from src.mlb_rag.historical_data import extract_game_features, GameFeatures, fetch_game_editorial
 
 
 # ── Base URL ──────────────────────────────────────────────────────────────────
@@ -84,6 +84,7 @@ def fetch_scores(date: str = None) -> List[Dict]:
         if game.get("status", {}).get("detailedState") == "Final":
             pk = game.get("gamePk")
             game["_direct_boxscore"] = _get(f"/game/{pk}/boxscore") or {}
+            game["_editorial"] = fetch_game_editorial(pk)
     print(f"[MLB API] Found {len(games)} games on {date}")
     return games
 
@@ -266,6 +267,14 @@ def build_game_recap_chunk(game: Dict) -> Optional[MLBChunk]:
                 so_text = f" The {winner_name} struck out {int(winning_so)} batters."
 
         full_text = outcome_text + inning_summary + pitcher_text + hits_text + hr_text + so_text
+
+        # Prepend MLB.com editorial headline + blurb when available
+        editorial = game.get("_editorial", {})
+        headline = editorial.get("headline", "")
+        blurb = (editorial.get("blurb", "") or "")[:300].strip()
+        if headline:
+            prefix = f"{headline} {blurb}".strip() if blurb else headline
+            full_text = prefix + "\n\n" + full_text
 
         # Inject game features into metadata for classifier reranking
         game_feats = extract_game_features(game)
