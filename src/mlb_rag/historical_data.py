@@ -10,6 +10,7 @@ Author: Parker Jackson
 Course: CSCI 357 - AI and Neural Networks
 """
 import os
+import time
 import requests
 import numpy as np
 import pandas as pd
@@ -70,6 +71,11 @@ class GameFeatures:
     is_extra_innings: float = 0.0     # 1 if innings > 9
     is_shutout: float = 0.0           # 1 if loser scored 0
     had_lead_change: float = 0.0      # 1 if lead changed hands (from linescore)
+
+    # Text fields — not part of the feature vector, stored separately
+    recap_text: Optional[str] = None
+    home_team: Optional[str] = None
+    away_team: Optional[str] = None
 
     def to_numpy(self) -> np.ndarray:
         """Convert to float32 numpy array for PyTorch ingestion."""
@@ -205,6 +211,80 @@ def _extract_boxscore_features(boxscore: dict) -> Tuple[float, float, float, flo
     return home_hrs, away_hrs, home_so, away_so
 
 
+def _extract_hr_leaders_text(boxscore: dict) -> str:
+    """Return a comma-separated string of 'Player (N HR)' for any batter with HRs."""
+    teams = boxscore.get("teams", {})
+    parts = []
+    for side in ("home", "away"):
+        team_data = teams.get(side, {})
+        batters = team_data.get("batters", [])
+        players = team_data.get("players", {})
+        for pid in batters:
+            player_data = players.get(f"ID{pid}", {})
+            hrs = int(player_data.get("stats", {}).get("batting", {}).get("homeRuns", 0))
+            if hrs > 0:
+                name = player_data.get("person", {}).get("fullName", "")
+                if name:
+                    parts.append(f"{name} ({hrs} HR)")
+    return ", ".join(parts)
+
+
+def _build_recap_text(
+    game: dict,
+    direct_boxscore: dict,
+    home_score: float,
+    away_score: float,
+    innings_played: float,
+    total_hits: float,
+    total_errors: float,
+    home_so: float,
+    away_so: float,
+) -> str:
+    """Build an enriched natural-language recap from already-extracted values."""
+    teams = game.get("teams", {})
+    home_name = teams.get("home", {}).get("team", {}).get("name", "") or "Home Team"
+    away_name = teams.get("away", {}).get("team", {}).get("name", "") or "Away Team"
+    date = game.get("gameDate", "")[:10]
+
+    if home_score > away_score:
+        winner, loser = home_name, away_name
+        win_sc, loss_sc = int(home_score), int(away_score)
+        winning_so = home_so
+    else:
+        winner, loser = away_name, home_name
+        win_sc, loss_sc = int(away_score), int(home_score)
+        winning_so = away_so
+
+    text = f"The {winner} defeated the {loser} {win_sc}-{loss_sc} on {date}."
+
+    if innings_played > 9:
+        text += f" The game went {int(innings_played)} innings."
+
+    decisions = game.get("decisions", {})
+    if decisions:
+        wp = decisions.get("winner", {}).get("fullName", "")
+        lp = decisions.get("loser", {}).get("fullName", "")
+        sv = decisions.get("save", {}).get("fullName", "")
+        if wp:
+            text += f" Winning pitcher: {wp}."
+        if lp:
+            text += f" Losing pitcher: {lp}."
+        if sv:
+            text += f" Save: {sv}."
+
+    if total_hits > 0:
+        text += f" The teams combined for {int(total_hits)} hits and {int(total_errors)} errors."
+
+    hr_text = _extract_hr_leaders_text(direct_boxscore)
+    if hr_text:
+        text += f" Home run leaders: {hr_text}."
+
+    if winning_so >= 8:
+        text += f" The {winner} struck out {int(winning_so)} batters."
+
+    return text.strip()
+
+
 def extract_game_features(game: dict) -> Optional[GameFeatures]:
     """
     Convert a raw MLB API game dict into a GameFeatures object.
@@ -228,9 +308,10 @@ def extract_game_features(game: dict) -> Optional[GameFeatures]:
     innings_played, total_hits, total_errors = _extract_linescore_features(linescore)
     had_lead_change = _detect_lead_change(linescore)
 
-    # Boxscore
-    boxscore = game.get("boxscore", {})
-    home_hrs, away_hrs, home_so, away_so = _extract_boxscore_features(boxscore)
+    # Boxscore — prefer the direct /game/{pk}/boxscore response (has teamStats)
+    # over the schedule hydration (which omits teamStats)
+    direct_boxscore = game.get("_direct_boxscore", game.get("boxscore", {}))
+    home_hrs, away_hrs, home_so, away_so = _extract_boxscore_features(direct_boxscore)
     total_hrs = home_hrs + away_hrs
 
     # Derived indicators
@@ -242,6 +323,17 @@ def extract_game_features(game: dict) -> Optional[GameFeatures]:
     # Assign SO to winning/losing pitcher side
     winning_pitcher_so = home_so if winner_is_home else away_so
     losing_pitcher_so = away_so if winner_is_home else home_so
+
+    # Team names and recap text
+    game_teams = game.get("teams", {})
+    home_team = game_teams.get("home", {}).get("team", {}).get("name", "")
+    away_team = game_teams.get("away", {}).get("team", {}).get("name", "")
+    recap_text = _build_recap_text(
+        game, direct_boxscore,
+        home_score, away_score,
+        innings_played, total_hits, total_errors,
+        home_so, away_so,
+    )
 
     return GameFeatures(
         game_pk=game_pk,
@@ -261,6 +353,9 @@ def extract_game_features(game: dict) -> Optional[GameFeatures]:
         is_extra_innings=is_extra_innings,
         is_shutout=is_shutout,
         had_lead_change=had_lead_change,
+        recap_text=recap_text,
+        home_team=home_team,
+        away_team=away_team,
     )
 
 
@@ -299,6 +394,12 @@ def fetch_date_range(start: str, end: str, verbose: bool = True) -> List[GameFea
             continue
 
         for game in data["dates"][0].get("games", []):
+            status = game.get("status", {}).get("detailedState", "")
+            if status == "Final":
+                game_pk = game.get("gamePk")
+                direct_bs = _get(f"/game/{game_pk}/boxscore") or {}
+                game["_direct_boxscore"] = direct_bs
+                time.sleep(0.05)   # avoid rate-limiting (~2-3 hrs per full rebuild)
             features = extract_game_features(game)
             if features:
                 all_features.append(features)
@@ -338,15 +439,20 @@ def features_to_dataframe(features: List[GameFeatures]) -> pd.DataFrame:
 
 
 def save_features(features: List[GameFeatures], path: str = "./data/game_features.npz") -> None:
-    """Save feature matrix and metadata to compressed numpy file."""
-    import os
+    """Save feature matrix, metadata, and recap text to compressed numpy file."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     X = np.stack([f.to_numpy() for f in features])
     game_pks = np.array([f.game_pk for f in features])
     dates = np.array([f.date for f in features])
+    recap_texts = np.array([f.recap_text or "" for f in features])
+    home_teams = np.array([f.home_team or "" for f in features])
+    away_teams = np.array([f.away_team or "" for f in features])
 
-    np.savez_compressed(path, X=X, game_pks=game_pks, dates=dates)
+    np.savez_compressed(
+        path, X=X, game_pks=game_pks, dates=dates,
+        recap_texts=recap_texts, home_teams=home_teams, away_teams=away_teams,
+    )
     print(f"[Save] Saved {len(features)} games to {path}")
 
 
@@ -368,12 +474,15 @@ def append_features(
         print("[Append] No new features to add.")
         return 0
 
-    new_X    = np.stack([f.to_numpy() for f in new_features])
-    new_pks  = np.array([f.game_pk for f in new_features])
-    new_dates = np.array([f.date for f in new_features])
+    new_X           = np.stack([f.to_numpy() for f in new_features])
+    new_pks         = np.array([f.game_pk for f in new_features])
+    new_dates       = np.array([f.date for f in new_features])
+    new_recap_texts = np.array([f.recap_text or "" for f in new_features])
+    new_home_teams  = np.array([f.home_team or "" for f in new_features])
+    new_away_teams  = np.array([f.away_team or "" for f in new_features])
 
     if os.path.exists(path):
-        old_X, old_pks, old_dates = load_features(path)
+        old_X, old_pks, old_dates, old_recap_texts, old_home_teams, old_away_teams = load_features(path)
         existing_pks = set(old_pks.tolist())
 
         mask = np.array([pk not in existing_pks for pk in new_pks.tolist()])
@@ -383,22 +492,57 @@ def append_features(
             print(f"[Append] All {len(new_features)} games already present — nothing added.")
             return 0
 
-        X     = np.concatenate([old_X,    new_X[mask]],    axis=0)
-        pks   = np.concatenate([old_pks,  new_pks[mask]],  axis=0)
-        dates = np.concatenate([old_dates, new_dates[mask]], axis=0)
+        X           = np.concatenate([old_X,           new_X[mask]],           axis=0)
+        pks         = np.concatenate([old_pks,         new_pks[mask]],         axis=0)
+        dates       = np.concatenate([old_dates,       new_dates[mask]],       axis=0)
+        recap_texts = np.concatenate([old_recap_texts, new_recap_texts[mask]], axis=0)
+        home_teams  = np.concatenate([old_home_teams,  new_home_teams[mask]],  axis=0)
+        away_teams  = np.concatenate([old_away_teams,  new_away_teams[mask]],  axis=0)
     else:
         X, pks, dates = new_X, new_pks, new_dates
+        recap_texts, home_teams, away_teams = new_recap_texts, new_home_teams, new_away_teams
         added = len(new_features)
 
-    np.savez_compressed(path, X=X, game_pks=pks, dates=dates)
+    np.savez_compressed(
+        path, X=X, game_pks=pks, dates=dates,
+        recap_texts=recap_texts, home_teams=home_teams, away_teams=away_teams,
+    )
     print(f"[Append] Added {added} new games → {len(pks)} total in {path}")
     return added
 
 
-def load_features(path: str = "./data/game_features.npz") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load saved features. Returns (X, game_pks, dates)."""
+def load_features(
+    path: str = "./data/game_features.npz",
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Load saved features. Returns (X, game_pks, dates, recap_texts, home_teams, away_teams).
+
+    recap_texts/home_teams/away_teams fall back to empty-string arrays for
+    files saved before these fields were added.
+    """
     data = np.load(path, allow_pickle=True)
-    return data["X"], data["game_pks"], data["dates"]
+    n = len(data["X"])
+    recap_texts = data["recap_texts"] if "recap_texts" in data else np.array([""] * n)
+    home_teams  = data["home_teams"]  if "home_teams"  in data else np.array([""] * n)
+    away_teams  = data["away_teams"]  if "away_teams"  in data else np.array([""] * n)
+    return data["X"], data["game_pks"], data["dates"], recap_texts, home_teams, away_teams
+
+
+def load_features_as_objects(path: str = "./data/game_features.npz") -> List[GameFeatures]:
+    """Load saved features as a list of GameFeatures objects (including text fields)."""
+    X, pks, dates, recap_texts, home_teams, away_teams = load_features(path)
+    fn = GameFeatures.feature_names()
+    result = []
+    for i, row in enumerate(X):
+        gf = GameFeatures(
+            game_pk=int(pks[i]),
+            date=str(dates[i]),
+            home_team=str(home_teams[i]) or None,
+            away_team=str(away_teams[i]) or None,
+            recap_text=str(recap_texts[i]) or None,
+            **dict(zip(fn, row.tolist()))
+        )
+        result.append(gf)
+    return result
 
 
 # ── Mock Data (offline dev) ────────────────────────────────────────────────────
@@ -478,7 +622,7 @@ if __name__ == "__main__":
 
         # Fast-forward start to day after the latest date already in the file for this season.
         if os.path.exists(args.out):
-            _, _, existing_dates = load_features(args.out)
+            _, _, existing_dates, *_ = load_features(args.out)
             season_dates_in_file = sorted(
                 d for d in existing_dates.tolist() if str(d).startswith(str(season))
             )

@@ -122,7 +122,7 @@ SWEEP_CONFIG = {
 
 def _load_data():
     path = os.path.abspath(DATA_PATH)
-    X, _, dates = load_features(path)
+    X, _, dates, *_ = load_features(path)
     feature_names = GameFeatures.feature_names()
 
     def _row_to_gf(row):

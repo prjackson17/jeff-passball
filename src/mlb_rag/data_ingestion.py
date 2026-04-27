@@ -80,6 +80,10 @@ def fetch_scores(date: str = None) -> List[Dict]:
         return []
 
     games = data["dates"][0].get("games", [])
+    for game in games:
+        if game.get("status", {}).get("detailedState") == "Final":
+            pk = game.get("gamePk")
+            game["_direct_boxscore"] = _get(f"/game/{pk}/boxscore") or {}
     print(f"[MLB API] Found {len(games)} games on {date}")
     return games
 
@@ -147,6 +151,26 @@ def fetch_recent_games(days_back: int = 3) -> List[Dict]:
     return all_games
 
 
+# ── Chunk Helpers ────────────────────────────────────────────────────────────
+
+def _extract_hr_leaders(boxscore: dict) -> List[str]:
+    """Return list of 'Player (N HR)' strings for any batter with at least 1 HR."""
+    teams = boxscore.get("teams", {})
+    parts = []
+    for side in ("home", "away"):
+        team_data = teams.get(side, {})
+        batters = team_data.get("batters", [])
+        players = team_data.get("players", {})
+        for pid in batters:
+            player_data = players.get(f"ID{pid}", {})
+            hrs = int(player_data.get("stats", {}).get("batting", {}).get("homeRuns", 0))
+            if hrs > 0:
+                name = player_data.get("person", {}).get("fullName", "")
+                if name:
+                    parts.append(f"{name} ({hrs} HR)")
+    return parts
+
+
 # ── Chunk Builders ────────────────────────────────────────────────────────────
 
 def build_game_recap_chunk(game: Dict) -> Optional[MLBChunk]:
@@ -211,7 +235,37 @@ def build_game_recap_chunk(game: Dict) -> Optional[MLBChunk]:
             if sv:
                 pitcher_text += f" Save: {sv}."
 
-        full_text = outcome_text + inning_summary + pitcher_text
+        # Hits and errors (already in linescore)
+        ls_teams = linescore.get("teams", {})
+        total_hits = (ls_teams.get("home", {}).get("hits", 0) +
+                      ls_teams.get("away", {}).get("hits", 0))
+        total_errors = (ls_teams.get("home", {}).get("errors", 0) +
+                        ls_teams.get("away", {}).get("errors", 0))
+        hits_text = ""
+        if total_hits:
+            hits_text = f" The teams combined for {total_hits} hits and {total_errors} errors."
+
+        # HR leaders and winning team SO from direct boxscore
+        direct_bs = game.get("_direct_boxscore", {})
+        hr_leaders = _extract_hr_leaders(direct_bs)
+        hr_text = f" Home run leaders: {', '.join(hr_leaders)}." if hr_leaders else ""
+
+        # Winning team total SO (proxy for pitching dominance)
+        so_text = ""
+        if status == "Final" and isinstance(away_score, int) and isinstance(home_score, int):
+            winning_side = "home" if home_score > away_score else "away"
+            winning_so = float(
+                direct_bs.get("teams", {})
+                         .get(winning_side, {})
+                         .get("teamStats", {})
+                         .get("pitching", {})
+                         .get("strikeOuts", 0)
+            )
+            if winning_so >= 8:
+                winner_name = home_name if winning_side == "home" else away_name
+                so_text = f" The {winner_name} struck out {int(winning_so)} batters."
+
+        full_text = outcome_text + inning_summary + pitcher_text + hits_text + hr_text + so_text
 
         # Inject game features into metadata for classifier reranking
         game_feats = extract_game_features(game)
