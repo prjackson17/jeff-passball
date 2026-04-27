@@ -346,6 +346,111 @@ def generate_true_negative_pairs(n: int = 300) -> List[SentencePair]:
     return pairs[:n]
 
 
+# ── Real-Data Pair Generation ──────────────────────────────────────────────────
+
+def _rule_sig_similarity(sig_a: frozenset, sig_b: frozenset) -> float:
+    """Jaccard-based similarity score for two rule-signature sets."""
+    if not sig_a and not sig_b:
+        return 0.5   # both routine — loosely related
+    if not sig_a or not sig_b:
+        return 0.1   # one notable, one routine — hard negative
+    return 0.1 + 0.8 * (len(sig_a & sig_b) / len(sig_a | sig_b))
+
+
+def build_real_data_pairs(
+    features,                    # List[GameFeatures] with recap_text populated
+    max_pairs: int = 2000,
+    seed: int = 42,
+) -> List[SentencePair]:
+    """
+    Build sentence pairs from real historical game recap text, using
+    auto-labeler rule signatures to assign similarity scores.
+
+    Positive pairs (score ~0.9):  two games with the same fired rules
+    Hard negatives (score ~0.1):  two notable games with disjoint rule signatures
+    True negatives (score  0.0):  one notable game vs one routine game
+    """
+    from collections import defaultdict
+    from src.mlb_rag.auto_labeler import label_game_with_reasons
+
+    random.seed(seed)
+
+    with_text = [f for f in features if f.recap_text]
+    if not with_text:
+        print("[PairGen] No GameFeatures with recap_text — skipping real pairs.")
+        return []
+
+    # Build signature groups
+    sig_groups: dict = defaultdict(list)
+    routine: list = []
+    for f in with_text:
+        label, fired = label_game_with_reasons(f)
+        sig = frozenset(fired)
+        if label == 1:
+            sig_groups[sig].append(f)
+        else:
+            routine.append(f)
+
+    notable_all = [f for group in sig_groups.values() for f in group]
+    sig_list = list(sig_groups.keys())
+
+    pairs: List[SentencePair] = []
+
+    # Positive pairs: same signature
+    for sig, group in sig_groups.items():
+        if len(group) < 2:
+            continue
+        shuffled = group[:]
+        random.shuffle(shuffled)
+        cap = min(len(shuffled) - 1, 50)
+        for i in range(cap):
+            pairs.append(SentencePair(
+                sentence_a=shuffled[i].recap_text,
+                sentence_b=shuffled[i + 1].recap_text,
+                score=0.9,
+                pair_type="real_same_signature",
+            ))
+
+    # Hard negatives: disjoint notable signatures
+    attempts = 0
+    hard_neg_target = max_pairs // 3
+    while len([p for p in pairs if p.pair_type == "real_same_signature"]) + \
+          len([p for p in pairs if p.pair_type == "real_disjoint_signature"]) < \
+          hard_neg_target + len([p for p in pairs if p.pair_type == "real_same_signature"]) \
+          and attempts < hard_neg_target * 5 and len(sig_list) >= 2:
+        s1, s2 = random.sample(sig_list, 2)
+        if s1 & s2:   # not disjoint — skip
+            attempts += 1
+            continue
+        g1 = random.choice(sig_groups[s1])
+        g2 = random.choice(sig_groups[s2])
+        pairs.append(SentencePair(
+            sentence_a=g1.recap_text,
+            sentence_b=g2.recap_text,
+            score=0.1,
+            pair_type="real_disjoint_signature",
+        ))
+        attempts += 1
+
+    # True negatives: notable vs routine
+    true_neg_target = max_pairs // 4
+    for _ in range(true_neg_target):
+        if not notable_all or not routine:
+            break
+        pairs.append(SentencePair(
+            sentence_a=random.choice(notable_all).recap_text,
+            sentence_b=random.choice(routine).recap_text,
+            score=0.0,
+            pair_type="real_notable_vs_routine",
+        ))
+
+    random.shuffle(pairs)
+    result = pairs[:max_pairs]
+    print(f"[PairGen] Generated {len(result)} real-data pairs "
+          f"({len(sig_groups)} rule signatures, {len(notable_all)} notable / {len(routine)} routine games)")
+    return result
+
+
 # ── Main Dataset Builder ───────────────────────────────────────────────────────
 
 def build_finetuning_dataset(
@@ -353,17 +458,22 @@ def build_finetuning_dataset(
     n_cross_type: int = 300,
     n_hard_neg: int = 500,
     n_true_neg: int = 300,
-    seed: int = 42
+    seed: int = 42,
+    real_features=None,          # Optional[List[GameFeatures]]
+    n_real_pairs: int = 2000,
 ) -> List[SentencePair]:
     """
     Build the full fine-tuning dataset by combining all pair types.
 
     Args:
-        n_paraphrase: Number of positive paraphrase pairs
-        n_cross_type: Number of loosely related pairs
-        n_hard_neg: Number of hard negative pairs
-        n_true_neg: Number of true negative pairs
+        n_paraphrase: Number of positive paraphrase pairs (synthetic)
+        n_cross_type: Number of loosely related pairs (synthetic)
+        n_hard_neg: Number of hard negative pairs (synthetic)
+        n_true_neg: Number of true negative pairs (synthetic)
         seed: Random seed for reproducibility
+        real_features: Optional list of GameFeatures with recap_text for real pairs.
+                       Pass load_features_as_objects() result here.
+        n_real_pairs: Max number of real-data pairs to generate.
 
     Returns:
         Shuffled list of SentencePairs ready for fine-tuning
@@ -388,6 +498,12 @@ def build_finetuning_dataset(
     print(f"  Generated {len(true_neg)} true negative pairs")
 
     all_pairs = paraphrase + cross + hard_neg + true_neg
+
+    if real_features is not None:
+        print("[PairGen] Generating real-data pairs...")
+        real_pairs = build_real_data_pairs(real_features, max_pairs=n_real_pairs, seed=seed)
+        all_pairs = all_pairs + real_pairs
+
     random.shuffle(all_pairs)
 
     print(f"\n[PairGen] Total pairs: {len(all_pairs)}")
