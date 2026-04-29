@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB Daily Briefing</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1923;
+      color: #e8edf2;
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    header {
+      background: #041e42;
+      border-bottom: 3px solid #bf0d3e;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    header h1 span { color: #bf0d3e; }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: #1a2e44;
+      color: #8ba5bf;
+      border: 1px solid #2a4560;
+      white-space: nowrap;
+    }
+
+    .badge.on { background: #0d2e1a; color: #4caf82; border-color: #1a5c38; }
+    .badge.warn { background: #2e1a0d; color: #e0a050; border-color: #5c3a1a; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 0; }
+
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #bf0d3e;
+      margin-bottom: 10px;
+    }
+
+    /* ── Briefing card ── */
+    #briefing-card {
+      background: #152535;
+      border: 1px solid #1f3a55;
+      border-radius: 8px;
+      padding: 22px 26px;
+      margin-bottom: 28px;
+      position: relative;
+    }
+
+    #briefing-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    #last-updated {
+      font-size: 0.75rem;
+      color: #5a7a99;
+    }
+
+    #briefing-text {
+      white-space: pre-wrap;
+      line-height: 1.75;
+      font-size: 0.95rem;
+      color: #cdd8e3;
+    }
+
+    #briefing-text.loading {
+      color: #4a6a88;
+      font-style: italic;
+    }
+
+    /* ── Buttons ── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 5px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 7px 16px;
+      transition: background 0.15s;
+    }
+
+    #refresh-btn {
+      background: #1f3a55;
+      color: #8bbfe0;
+    }
+    #refresh-btn:hover { background: #2a4d6e; }
+    #refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+    #submit-btn {
+      background: #bf0d3e;
+      color: #fff;
+      padding: 9px 22px;
+    }
+    #submit-btn:hover { background: #d41246; }
+    #submit-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── Query card ── */
+    #query-card {
+      background: #152535;
+      border: 1px solid #1f3a55;
+      border-radius: 8px;
+      padding: 22px 26px;
+    }
+
+    #query-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    #question-input {
+      flex: 1;
+      background: #0f1f30;
+      border: 1px solid #2a4560;
+      border-radius: 5px;
+      color: #e8edf2;
+      font-size: 0.95rem;
+      padding: 9px 14px;
+      outline: none;
+    }
+    #question-input:focus { border-color: #bf0d3e; }
+    #question-input::placeholder { color: #3a5a78; }
+
+    #answer-box {
+      margin-top: 18px;
+      padding: 16px 18px;
+      background: #0f1f30;
+      border-left: 3px solid #bf0d3e;
+      border-radius: 0 5px 5px 0;
+      white-space: pre-wrap;
+      line-height: 1.75;
+      font-size: 0.93rem;
+      color: #cdd8e3;
+      display: none;
+    }
+
+    #answer-box.loading {
+      color: #4a6a88;
+      font-style: italic;
+      display: block;
+    }
+
+    #answer-box.visible { display: block; }
+
+    .error { color: #e05a5a !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚾ MLB <span>Daily Briefing</span></h1>
+  <div class="badges" id="badges">
+    <span class="badge">Loading…</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Briefing -->
+  <div id="briefing-card">
+    <div id="briefing-header">
+      <div class="section-title">Today's Briefing</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span id="last-updated"></span>
+        <button id="refresh-btn" onclick="doRefresh()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="briefing-text" class="loading">Loading briefing…</div>
+  </div>
+
+  <!-- Query -->
+  <div id="query-card">
+    <div class="section-title">Ask About Recent Games</div>
+    <div id="query-row">
+      <input
+        id="question-input"
+        type="text"
+        placeholder="e.g. Who led the AL East last night? Any comeback wins?"
+        onkeydown="if(event.key==='Enter') doQuery()"
+      />
+      <button id="submit-btn" onclick="doQuery()">Ask</button>
+    </div>
+    <div id="answer-box"></div>
+  </div>
+
+</div>
+
+<script>
+  async function loadHealth() {
+    try {
+      const r = await fetch('/api/health');
+      const d = await r.json();
+      const el = document.getElementById('badges');
+      el.innerHTML = [
+        `<span class="badge ${d.embedder === 'finetuned' ? 'on' : 'warn'}">${d.embedder === 'finetuned' ? 'Fine-tuned ✓' : 'Base model'}</span>`,
+        `<span class="badge ${d.classifier ? 'on' : ''}">${d.classifier ? 'Reranker ✓' : 'No reranker'}</span>`,
+        `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty facts ✓' : 'No novelty'}</span>`,
+      ].join('');
+    } catch {}
+  }
+
+  async function loadBriefing() {
+    const el = document.getElementById('briefing-text');
+    const ts = document.getElementById('last-updated');
+    try {
+      const r = await fetch('/api/briefing');
+      const d = await r.json();
+      el.classList.remove('loading');
+      el.textContent = d.briefing || 'No briefing available.';
+      if (d.last_refresh) {
+        const dt = new Date(d.last_refresh + 'Z');
+        ts.textContent = 'Updated ' + dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      }
+    } catch(e) {
+      el.classList.add('error');
+      el.textContent = 'Failed to load briefing. Is ANTHROPIC_API_KEY set?';
+    }
+  }
+
+  async function doRefresh() {
+    const btn = document.getElementById('refresh-btn');
+    const el = document.getElementById('briefing-text');
+    btn.disabled = true;
+    btn.textContent = '↻ Refreshing…';
+    el.classList.add('loading');
+    el.textContent = 'Fetching latest games and regenerating briefing…';
+    try {
+      await fetch('/api/refresh', { method: 'POST' });
+      await loadBriefing();
+    } catch {
+      el.classList.add('error');
+      el.textContent = 'Refresh failed.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Refresh';
+    }
+  }
+
+  async function doQuery() {
+    const input = document.getElementById('question-input');
+    const btn = document.getElementById('submit-btn');
+    const box = document.getElementById('answer-box');
+    const q = input.value.trim();
+    if (!q) return;
+
+    btn.disabled = true;
+    box.className = 'loading';
+    box.textContent = 'Thinking…';
+
+    try {
+      const r = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      });
+      const d = await r.json();
+      box.className = 'visible';
+      if (r.ok) {
+        box.textContent = d.answer;
+      } else {
+        box.classList.add('error');
+        box.textContent = d.detail || 'Error from server.';
+      }
+    } catch {
+      box.className = 'visible error';
+      box.textContent = 'Request failed — server may be unavailable.';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Init
+  loadHealth();
+  loadBriefing();
+</script>
+</body>
+</html>

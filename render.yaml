@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: mlb-rag-briefing
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DAYS_BACK
+        value: "2"
