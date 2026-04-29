@@ -34,7 +34,8 @@ from src.mlb_rag.historical_data import load_features, GameFeatures
 @dataclass
 class PipelineState:
     embedder: object = None
-    store: object = None
+    store: object = None         # briefing store (DAYS_BACK days)
+    query_store: object = None   # query store (QUERY_DAYS_BACK days, larger)
     classifier: object = None
     X_hist: Optional[np.ndarray] = None
     feature_names: Optional[list] = None
@@ -59,22 +60,31 @@ def initialize():
     _load_classifier()
     _load_historical()
 
-    # Always fetch recent games — needed for query even if briefing is cached
-    days_back = int(os.environ.get("DAYS_BACK", 2))
-    print(f"[Pipeline] Fetching last {days_back} day(s) of games...")
-    chunks = ingest_mlb_data(days_back=days_back)
-    game_chunks = [c for c in chunks if c.chunk_type == "game_recap"]
+    brief_days = int(os.environ.get("DAYS_BACK", 2))
+    query_days = int(os.environ.get("QUERY_DAYS_BACK", 14))
 
-    if not game_chunks:
+    # Briefing store — small window, also used as fallback for queries
+    print(f"[Pipeline] Fetching {brief_days} day(s) for briefing store...")
+    brief_chunks = ingest_mlb_data(days_back=brief_days)
+    brief_game_chunks = [c for c in brief_chunks if c.chunk_type == "game_recap"]
+
+    if not brief_game_chunks:
         _state.briefing = "No completed games found for the requested period."
         _state.last_refresh = datetime.now(timezone.utc)
         return
 
-    print(f"[Pipeline] {len(game_chunks)} game recaps ingested. Building vector store...")
-    _state.store = build_vector_store(chunks, embedder=_state.embedder, save=False)
+    _state.store = build_vector_store(brief_chunks, embedder=_state.embedder, save=False)
     _state.ready = True
 
-    # Use cached briefing if it was generated today — skip the Claude API call
+    # Query store — larger window for broader season questions
+    print(f"[Pipeline] Fetching {query_days} day(s) for query store...")
+    query_chunks = ingest_mlb_data(days_back=query_days)
+    query_game_chunks = [c for c in query_chunks if c.chunk_type == "game_recap"]
+    if query_game_chunks:
+        _state.query_store = build_vector_store(query_chunks, embedder=_state.embedder, save=False)
+        print(f"[Pipeline] Query store: {len(query_game_chunks)} game recaps.")
+
+    # Use cached briefing if fresh — skip Claude API call
     cached = _load_cache()
     if cached:
         print("[Pipeline] Using today's cached briefing — skipping Claude API call.")
@@ -82,27 +92,34 @@ def initialize():
         _state.last_refresh = datetime.fromisoformat(cached["last_refresh"])
     else:
         print("[Pipeline] No fresh cache — generating briefing...")
-        _generate_and_cache(game_chunks)
+        _generate_and_cache(brief_game_chunks)
 
     print("[Pipeline] Ready.")
 
 
 def refresh():
-    """Re-fetch recent games, rebuild vector store, force-regenerate briefing."""
-    days_back = int(os.environ.get("DAYS_BACK", 2))
-    print(f"[Pipeline] Refreshing — fetching last {days_back} day(s) of games...")
-    chunks = ingest_mlb_data(days_back=days_back)
-    game_chunks = [c for c in chunks if c.chunk_type == "game_recap"]
+    """Re-fetch both stores and force-regenerate briefing (called by cron)."""
+    brief_days = int(os.environ.get("DAYS_BACK", 2))
+    query_days = int(os.environ.get("QUERY_DAYS_BACK", 14))
 
-    if not game_chunks:
+    print(f"[Pipeline] Refreshing briefing store ({brief_days} days)...")
+    brief_chunks = ingest_mlb_data(days_back=brief_days)
+    brief_game_chunks = [c for c in brief_chunks if c.chunk_type == "game_recap"]
+    if not brief_game_chunks:
         _state.briefing = "No completed games found for the requested period."
         _state.last_refresh = datetime.now(timezone.utc)
         _state.ready = False
         return
-
-    _state.store = build_vector_store(chunks, embedder=_state.embedder, save=False)
+    _state.store = build_vector_store(brief_chunks, embedder=_state.embedder, save=False)
     _state.ready = True
-    _generate_and_cache(game_chunks)
+    _generate_and_cache(brief_game_chunks)
+
+    print(f"[Pipeline] Refreshing query store ({query_days} days)...")
+    query_chunks = ingest_mlb_data(days_back=query_days)
+    query_game_chunks = [c for c in query_chunks if c.chunk_type == "game_recap"]
+    if query_game_chunks:
+        _state.query_store = build_vector_store(query_chunks, embedder=_state.embedder, save=False)
+
     print("[Pipeline] Refresh complete.")
 
 

@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from contextlib import asynccontextmanager
+from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -19,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import app.pipeline as pipeline
+from app.live_stats import augment_query_context
 from src.mlb_rag.commentary import answer_query
 
 
@@ -49,8 +51,14 @@ def get_briefing():
     }
 
 
+class Message(BaseModel):
+    role: str
+    content: str
+
+
 class QueryRequest(BaseModel):
     question: str
+    history: List[Message] = []
 
 
 @app.post("/api/query")
@@ -58,14 +66,33 @@ def query(req: QueryRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="question is required")
     s = pipeline.get_state()
-    if not s.ready or s.store is None:
+    if not s.ready:
         raise HTTPException(status_code=503, detail="Pipeline is still initializing — try again in a moment")
-    answer = answer_query(req.question, s.store, s.embedder, classifier=s.classifier)
+
+    # Prefer the larger query store; fall back to briefing store
+    store = s.query_store or s.store
+
+    extra = augment_query_context(req.question)
+
+    # Build history for Claude — include current question as last entry
+    history = [{"role": m.role, "content": m.content} for m in req.history]
+    if not history or history[-1]["content"] != req.question:
+        history.append({"role": "user", "content": req.question})
+
+    answer = answer_query(
+        req.question,
+        store,
+        s.embedder,
+        classifier=s.classifier,
+        history=history,
+        extra_context=extra,
+    )
     return {"answer": answer}
 
 
 @app.post("/api/refresh")
 def refresh():
+    """Called by cron job — not exposed in UI."""
     pipeline.refresh()
     s = pipeline.get_state()
     return {
@@ -81,6 +108,7 @@ def health():
         "embedder": s.embedder_type,
         "classifier": s.classifier_loaded,
         "novelty_enabled": s.novelty_enabled,
+        "query_store_ready": s.query_store is not None,
         "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
         "ready": s.ready,
     }

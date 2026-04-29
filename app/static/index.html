@@ -27,207 +27,143 @@
       gap: 12px;
     }
 
-    header h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #fff;
-    }
-
+    header h1 { font-size: 1.4rem; font-weight: 700; color: #fff; }
     header h1 span { color: #bf0d3e; }
 
-    .badges {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .badge {
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 12px;
-      background: #1a2e44;
-      color: #8ba5bf;
-      border: 1px solid #2a4560;
+      font-size: 0.72rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 12px;
+      background: #1a2e44; color: #8ba5bf; border: 1px solid #2a4560;
       white-space: nowrap;
     }
-
     .badge.on   { background: #0d2e1a; color: #4caf82; border-color: #1a5c38; }
     .badge.warn { background: #2e1a0d; color: #e0a050; border-color: #5c3a1a; }
 
     .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 0; }
 
     .section-title {
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: #bf0d3e;
-      margin-bottom: 10px;
+      font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: #bf0d3e; margin-bottom: 10px;
     }
 
-    /* ── Spinning baseball loader ── */
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
+    /* ── Spinning baseball ── */
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     .loader {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: #4a6a88;
-      font-style: italic;
-      font-size: 0.95rem;
-      padding: 8px 0;
+      display: flex; align-items: center; gap: 12px;
+      color: #4a6a88; font-style: italic; font-size: 0.95rem; padding: 8px 0;
     }
+    .loader .ball { font-size: 1.6rem; display: inline-block; animation: spin 1s linear infinite; }
 
-    .loader .ball {
-      font-size: 1.6rem;
-      display: inline-block;
-      animation: spin 1s linear infinite;
-      line-height: 1;
-    }
-
-    /* ── Markdown rendered content ── */
-    .md-body {
-      line-height: 1.75;
-      font-size: 0.95rem;
-      color: #cdd8e3;
-    }
-
-    .md-body h1, .md-body h2, .md-body h3 {
-      color: #e8edf2;
-      font-weight: 700;
-      margin: 1.2em 0 0.4em;
-      line-height: 1.3;
-    }
-
-    .md-body h1 { font-size: 1.2rem; border-bottom: 1px solid #1f3a55; padding-bottom: 6px; }
-    .md-body h2 { font-size: 1.05rem; color: #8bbfe0; }
-    .md-body h3 { font-size: 0.97rem; color: #8bbfe0; }
-
-    .md-body p { margin: 0.6em 0; }
-
+    /* ── Markdown styles ── */
+    .md-body { line-height: 1.75; font-size: 0.95rem; color: #cdd8e3; }
+    .md-body h1, .md-body h2, .md-body h3 { color: #e8edf2; font-weight: 700; margin: 1.1em 0 0.4em; }
+    .md-body h1 { font-size: 1.15rem; border-bottom: 1px solid #1f3a55; padding-bottom: 5px; }
+    .md-body h2 { font-size: 1.0rem; color: #8bbfe0; }
+    .md-body h3 { font-size: 0.95rem; color: #8bbfe0; }
+    .md-body p  { margin: 0.55em 0; }
     .md-body strong { color: #e8edf2; font-weight: 700; }
-    .md-body em    { color: #a0bcd0; }
-
-    .md-body ul, .md-body ol {
-      margin: 0.5em 0 0.5em 1.4em;
-    }
-
-    .md-body li { margin: 0.25em 0; }
-
-    .md-body blockquote {
-      border-left: 3px solid #bf0d3e;
-      margin: 0.8em 0;
-      padding: 6px 14px;
-      color: #8ba5bf;
-      background: #0f1f30;
-      border-radius: 0 4px 4px 0;
-    }
-
-    .md-body code {
-      background: #0f1f30;
-      color: #7dd3fc;
-      padding: 1px 5px;
-      border-radius: 3px;
-      font-size: 0.88em;
-    }
-
-    .md-body hr {
-      border: none;
-      border-top: 1px solid #1f3a55;
-      margin: 1.2em 0;
-    }
+    .md-body em     { color: #a0bcd0; }
+    .md-body ul, .md-body ol { margin: 0.5em 0 0.5em 1.4em; }
+    .md-body li { margin: 0.2em 0; }
+    .md-body hr { border: none; border-top: 1px solid #1f3a55; margin: 1em 0; }
+    .md-body code { background: #0f1f30; color: #7dd3fc; padding: 1px 5px; border-radius: 3px; font-size: 0.88em; }
 
     /* ── Briefing card ── */
     #briefing-card {
-      background: #152535;
-      border: 1px solid #1f3a55;
-      border-radius: 8px;
-      padding: 22px 26px;
-      margin-bottom: 28px;
+      background: #152535; border: 1px solid #1f3a55;
+      border-radius: 8px; padding: 22px 26px; margin-bottom: 28px;
     }
-
     #briefing-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    #last-updated { font-size: 0.75rem; color: #5a7a99; }
+
+    /* ── Chat card ── */
+    #chat-card {
+      background: #152535; border: 1px solid #1f3a55;
+      border-radius: 8px; overflow: hidden;
+    }
+
+    #chat-header { padding: 16px 22px 0; }
+
+    #chat-messages {
+      max-height: 520px;
+      overflow-y: auto;
+      padding: 16px 22px;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-      gap: 10px;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
     }
 
-    #last-updated {
-      font-size: 0.75rem;
-      color: #5a7a99;
+    #chat-messages:empty::after {
+      content: "Ask anything about recent MLB games, standings, or player stats.";
+      color: #3a5a78;
+      font-style: italic;
+      font-size: 0.9rem;
+      text-align: center;
+      margin: 20px auto;
     }
 
-    /* ── Buttons ── */
-    button {
-      cursor: pointer;
-      border: none;
-      border-radius: 5px;
-      font-weight: 600;
-      font-size: 0.85rem;
-      padding: 7px 16px;
-      transition: background 0.15s;
+    .msg-row { display: flex; flex-direction: column; gap: 4px; }
+    .msg-row.user  { align-items: flex-end; }
+    .msg-row.assistant { align-items: flex-start; }
+
+    .msg-bubble {
+      max-width: 82%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 0.93rem;
+      line-height: 1.5;
     }
 
-    #refresh-btn {
-      background: #1f3a55;
-      color: #8bbfe0;
-    }
-    #refresh-btn:hover    { background: #2a4d6e; }
-    #refresh-btn:disabled { opacity: 0.5; cursor: default; }
-
-    #submit-btn {
+    .msg-row.user .msg-bubble {
       background: #bf0d3e;
       color: #fff;
-      padding: 9px 22px;
-    }
-    #submit-btn:hover    { background: #d41246; }
-    #submit-btn:disabled { opacity: 0.5; cursor: default; }
-
-    /* ── Query card ── */
-    #query-card {
-      background: #152535;
-      border: 1px solid #1f3a55;
-      border-radius: 8px;
-      padding: 22px 26px;
+      border-bottom-right-radius: 3px;
     }
 
-    #query-row {
+    .msg-row.assistant .msg-bubble {
+      background: #0f1f30;
+      color: #cdd8e3;
+      border-bottom-left-radius: 3px;
+    }
+
+    .msg-row.assistant .msg-bubble.md-body { padding: 12px 16px; }
+
+    /* ── Input row ── */
+    #chat-input-row {
       display: flex;
       gap: 10px;
-      margin-top: 10px;
+      padding: 14px 22px 18px;
+      border-top: 1px solid #1f3a55;
+      background: #152535;
     }
 
     #question-input {
       flex: 1;
-      background: #0f1f30;
-      border: 1px solid #2a4560;
-      border-radius: 5px;
-      color: #e8edf2;
-      font-size: 0.95rem;
-      padding: 9px 14px;
-      outline: none;
+      background: #0f1f30; border: 1px solid #2a4560;
+      border-radius: 20px; color: #e8edf2;
+      font-size: 0.95rem; padding: 9px 16px; outline: none;
     }
-    #question-input:focus       { border-color: #bf0d3e; }
+    #question-input:focus { border-color: #bf0d3e; }
     #question-input::placeholder { color: #3a5a78; }
 
-    #answer-box {
-      margin-top: 18px;
-      padding: 16px 18px;
-      background: #0f1f30;
-      border-left: 3px solid #bf0d3e;
-      border-radius: 0 5px 5px 0;
-      display: none;
+    #submit-btn {
+      background: #bf0d3e; color: #fff;
+      border: none; border-radius: 20px;
+      font-weight: 600; font-size: 0.85rem;
+      padding: 9px 20px; cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
     }
-
-    #answer-box.visible { display: block; }
+    #submit-btn:hover    { background: #d41246; }
+    #submit-btn:disabled { opacity: 0.5; cursor: default; }
 
     .error { color: #e05a5a !important; font-style: normal !important; }
   </style>
@@ -236,9 +172,7 @@
 
 <header>
   <h1>⚾ MLB <span>Daily Briefing</span></h1>
-  <div class="badges" id="badges">
-    <span class="badge">Loading…</span>
-  </div>
+  <div class="badges" id="badges"><span class="badge">Loading…</span></div>
 </header>
 
 <div class="container">
@@ -247,29 +181,28 @@
   <div id="briefing-card">
     <div id="briefing-header">
       <div class="section-title">Today's Briefing</div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <span id="last-updated"></span>
-        <button id="refresh-btn" onclick="doRefresh()">↻ Refresh</button>
-      </div>
+      <span id="last-updated"></span>
     </div>
     <div id="briefing-text">
       <div class="loader"><span class="ball">⚾</span> Loading briefing…</div>
     </div>
   </div>
 
-  <!-- Query -->
-  <div id="query-card">
-    <div class="section-title">Ask About Recent Games</div>
-    <div id="query-row">
+  <!-- Chat -->
+  <div id="chat-card">
+    <div id="chat-header">
+      <div class="section-title">Ask About Recent Games</div>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input-row">
       <input
         id="question-input"
         type="text"
-        placeholder="e.g. Who led the AL East last night? Any comeback wins?"
-        onkeydown="if(event.key==='Enter') doQuery()"
+        placeholder="Who led the AL East? Any walk-off wins? How is Pete Alonso doing?"
+        onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); doQuery(); }"
       />
-      <button id="submit-btn" onclick="doQuery()">Ask</button>
+      <button id="submit-btn" onclick="doQuery()">Send</button>
     </div>
-    <div id="answer-box"></div>
   </div>
 
 </div>
@@ -277,11 +210,39 @@
 <script>
   marked.setOptions({ breaks: true });
 
+  let history = [];
+
   function renderMd(text) {
     const div = document.createElement('div');
     div.className = 'md-body';
     div.innerHTML = marked.parse(text || '');
     return div;
+  }
+
+  function appendMessage(role, content, isLoader) {
+    const row = document.createElement('div');
+    row.className = `msg-row ${role}`;
+
+    const bubble = document.createElement('div');
+
+    if (isLoader) {
+      bubble.className = 'msg-bubble loader';
+      bubble.innerHTML = '<span class="ball">⚾</span> Thinking…';
+    } else if (role === 'user') {
+      bubble.className = 'msg-bubble';
+      bubble.textContent = content;
+    } else {
+      bubble.className = 'msg-bubble md-body';
+      bubble.innerHTML = marked.parse(content || '');
+    }
+
+    row.appendChild(bubble);
+    row.dataset.role = role;
+
+    const container = document.getElementById('chat-messages');
+    container.appendChild(row);
+    container.scrollTop = container.scrollHeight;
+    return row;
   }
 
   async function loadHealth() {
@@ -291,7 +252,8 @@
       document.getElementById('badges').innerHTML = [
         `<span class="badge ${d.embedder === 'finetuned' ? 'on' : 'warn'}">${d.embedder === 'finetuned' ? 'Fine-tuned ✓' : 'Base model'}</span>`,
         `<span class="badge ${d.classifier ? 'on' : ''}">${d.classifier ? 'Reranker ✓' : 'No reranker'}</span>`,
-        `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty facts ✓' : 'No novelty'}</span>`,
+        `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty ✓' : 'No novelty'}</span>`,
+        `<span class="badge ${d.query_store_ready ? 'on' : ''}">${d.query_store_ready ? '14-day window ✓' : 'Short window'}</span>`,
       ].join('');
     } catch {}
   }
@@ -313,51 +275,48 @@
     }
   }
 
-  async function doRefresh() {
-    const btn = document.getElementById('refresh-btn');
-    const el  = document.getElementById('briefing-text');
-    btn.disabled = true;
-    btn.textContent = '↻ Refreshing…';
-    el.innerHTML = '<div class="loader"><span class="ball">⚾</span> Fetching latest games…</div>';
-    try {
-      await fetch('/api/refresh', { method: 'POST' });
-      await loadBriefing();
-    } catch {
-      el.innerHTML = '<p class="error">Refresh failed.</p>';
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '↻ Refresh';
-    }
-  }
-
   async function doQuery() {
-    const input = document.getElementById('question-input');
-    const btn   = document.getElementById('submit-btn');
-    const box   = document.getElementById('answer-box');
+    const input  = document.getElementById('question-input');
+    const btn    = document.getElementById('submit-btn');
     const q = input.value.trim();
-    if (!q) return;
+    if (!q || btn.disabled) return;
 
     btn.disabled = true;
-    box.className = 'visible';
-    box.innerHTML = '<div class="loader"><span class="ball">⚾</span> Thinking…</div>';
+    input.value = '';
+
+    // Show user message
+    appendMessage('user', q);
+
+    // Add to history before sending
+    history.push({ role: 'user', content: q });
+
+    // Show typing indicator
+    const loaderRow = appendMessage('assistant', '', true);
 
     try {
       const r = await fetch('/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: q, history }),
       });
       const d = await r.json();
-      box.innerHTML = '';
+
+      loaderRow.remove();
+
       if (r.ok) {
-        box.appendChild(renderMd(d.answer));
+        appendMessage('assistant', d.answer);
+        history.push({ role: 'assistant', content: d.answer });
       } else {
-        box.innerHTML = `<p class="error">${d.detail || 'Error from server.'}</p>`;
+        appendMessage('assistant', `**Error:** ${d.detail || 'Something went wrong.'}`);
+        history.pop(); // remove failed user turn
       }
     } catch {
-      box.innerHTML = '<p class="error">Request failed — server may be unavailable.</p>';
+      loaderRow.remove();
+      appendMessage('assistant', '**Error:** Request failed — server may be unavailable.');
+      history.pop();
     } finally {
       btn.disabled = false;
+      input.focus();
     }
   }
 

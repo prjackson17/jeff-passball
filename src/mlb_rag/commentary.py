@@ -32,21 +32,27 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 
 def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 1000) -> str:
-    """
-    Call the Claude API and return the response text.
-    Reads ANTHROPIC_API_KEY from environment.
-    """
+    """Call Claude with a single user turn."""
+    return _call_claude_messages(
+        system_prompt,
+        [{"role": "user", "content": user_prompt}],
+        max_tokens,
+    )
+
+
+def _call_claude_messages(system_prompt: str, messages: list, max_tokens: int = 1000) -> str:
+    """Call Claude with a full conversation history (multi-turn support)."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     headers = {
         "Content-Type": "application/json",
         "x-api-key": api_key,
-        "anthropic-version": "2023-06-01"
+        "anthropic-version": "2023-06-01",
     }
     payload = {
         "model": CLAUDE_MODEL,
         "max_tokens": max_tokens,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_prompt}]
+        "messages": messages,
     }
     resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
@@ -175,52 +181,57 @@ def answer_query(
         query: str,
         store: MLBVectorStore,
         embedder: MLBEmbedder,
-        top_k: int = 6,
+        top_k: int = 8,
         classifier=None,
         verbose: bool = False,
+        history: "list | None" = None,
+        extra_context: str = "",
 ) -> str:
     """
     Answer a natural language MLB question using RAG.
 
-    1. Embed the query
-    2. Retrieve top-k semantically similar chunks
-    3. (Optional) Rerank with trend classifier so notable games surface first
-    4. Pass context + query to Claude for grounded response
+    Retrieves relevant chunks, optionally reranks with classifier, injects
+    context into the system prompt, and calls Claude. Supports multi-turn
+    conversation via the history parameter.
 
     Args:
-        query:      Any MLB question ("who won last night?", "AL East standings?")
-        store:      Populated vector store.
-        embedder:   Sentence transformer embedder.
-        top_k:      Number of chunks to retrieve.
-        classifier: Optional loaded TrendClassifierMLP for reranking.
-        verbose:    If True, print retrieved context.
+        query:         Current user question (used for retrieval).
+        store:         Populated vector store.
+        embedder:      Sentence transformer embedder.
+        top_k:         Number of chunks to retrieve.
+        classifier:    Optional TrendClassifierMLP for reranking.
+        verbose:       If True, print retrieved context.
+        history:       Full conversation as [{role, content}] list.
+                       The current question should be the last user entry.
+                       When None, falls back to single-turn behavior.
+        extra_context: Additional context (e.g. live standings/stats) to
+                       prepend before the RAG chunks.
 
     Returns:
         Generated commentary string.
     """
-    # Step 1 & 2: Retrieve
     results = query_store(query, store, embedder, top_k=top_k)
-
-    # Step 3: Rerank (if classifier provided)
     if classifier is not None:
         results = rerank_with_classifier(results, classifier)
 
-    context = build_context_string(results)
+    rag_context = build_context_string(results)
 
     if verbose:
         print("\n── Retrieved Context ──")
-        print(context)
+        print(rag_context)
         print("── End Context ──\n")
 
-    # Step 4: Generate
-    user_prompt = f"""CONTEXT (retrieved MLB data):
-{context}
+    full_context = (extra_context + "\n\n--- RECENT GAME DATA ---\n" + rag_context
+                    if extra_context else rag_context)
 
-QUESTION: {query}
+    system = BROADCASTER_SYSTEM + f"\n\nCONTEXT (use this data to answer):\n{full_context}"
 
-Please answer based only on the context above."""
+    if history:
+        messages = history
+    else:
+        messages = [{"role": "user", "content": query}]
 
-    return _call_claude(BROADCASTER_SYSTEM, user_prompt)
+    return _call_claude_messages(system, messages)
 
 
 def generate_daily_briefing(
