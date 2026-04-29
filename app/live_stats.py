@@ -2,9 +2,10 @@
 live_stats.py
 
 Fetches live MLB data from the Stats API to supplement RAG context on
-every query. Two types of augmentation:
+every query. Three types of augmentation:
   1. Current division standings (cached 5 min, always injected)
   2. Season stats for any player name detected in the query
+  3. League stat leaders (cached 5 min, injected for MVP/rankings queries)
 """
 
 import re
@@ -190,19 +191,96 @@ def _fetch_player_stats(player_id: int) -> str:
     return "\n".join(lines)
 
 
+# ── League stat leaders (5-min cache) ─────────────────────────────────────────
+
+_leaders_cache: dict = {"text": None, "ts": 0.0}
+
+_BATTING_CATS  = ["homeRuns", "battingAverage", "rbi", "onBasePlusSlugging",
+                  "stolenBases", "runs", "hits"]
+_PITCHING_CATS = ["earnedRunAverage", "strikeouts", "wins", "whip", "saves"]
+
+_CAT_LABELS = {
+    "homeRuns": "HR", "battingAverage": "AVG", "rbi": "RBI",
+    "onBasePlusSlugging": "OPS", "stolenBases": "SB", "runs": "R", "hits": "H",
+    "earnedRunAverage": "ERA", "strikeouts": "K", "wins": "W",
+    "whip": "WHIP", "saves": "SV",
+}
+
+_RANKINGS_KEYWORDS = {
+    "mvp", "best", "leader", "leaders", "top", "rank", "ranking", "rankings",
+    "award", "cy young", "cyyoung", "most", "leading", "who leads", "stat",
+    "stats", "leaderboard", "leaderboards", "best player", "best hitter",
+    "best pitcher", "slugger", "ace",
+}
+
+
+def _is_rankings_query(query: str) -> bool:
+    q = query.lower()
+    return any(kw in q for kw in _RANKINGS_KEYWORDS)
+
+
+def _fetch_stat_leaders(limit: int = 5) -> str:
+    now = time.time()
+    if _leaders_cache["text"] and now - _leaders_cache["ts"] < _STANDINGS_TTL:
+        return _leaders_cache["text"]
+
+    categories = ",".join(_BATTING_CATS + _PITCHING_CATS)
+    data = _get("/stats/leaders", params={
+        "leaderCategories": categories,
+        "leaderGameTypes": "R",
+        "season": _SEASON,
+        "sportId": 1,
+        "limit": limit,
+    })
+    if not data:
+        return ""
+
+    sections = {"BATTING LEADERS": [], "PITCHING LEADERS": []}
+    for group in data.get("leagueLeaders", []):
+        cat   = group.get("leaderCategory", "")
+        label = _CAT_LABELS.get(cat, cat)
+        dest  = "PITCHING LEADERS" if cat in _PITCHING_CATS else "BATTING LEADERS"
+        entries = []
+        for entry in group.get("leaders", [])[:limit]:
+            name  = entry.get("person", {}).get("fullName", "?")
+            team  = entry.get("team", {}).get("clubName", "?")
+            value = entry.get("value", "?")
+            rank  = entry.get("rank", "?")
+            entries.append(f"  {rank}. {name} ({team}) — {value}")
+        if entries:
+            sections[dest].append(f"{label}:\n" + "\n".join(entries))
+
+    lines = [f"MLB STAT LEADERS — {_SEASON} Season (top {limit}):"]
+    for section, groups in sections.items():
+        if groups:
+            lines.append(f"\n{section}:")
+            lines.extend(groups)
+
+    result = "\n".join(lines)
+    _leaders_cache["text"] = result
+    _leaders_cache["ts"] = now
+    return result
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def augment_query_context(query: str) -> str:
     """
     Return a string of live MLB data to prepend to RAG context.
-    Always includes current standings; also includes player season stats
-    for any player name detected in the query.
+    Always includes current standings. Also includes:
+      - League stat leaders for MVP/rankings/best-player queries
+      - Individual player season stats for any player name detected
     """
     parts = []
 
     standings = _fetch_standings()
     if standings:
         parts.append(standings)
+
+    if _is_rankings_query(query):
+        leaders = _fetch_stat_leaders()
+        if leaders:
+            parts.append(leaders)
 
     for name in _extract_names(query):
         pid = _search_player(name)
