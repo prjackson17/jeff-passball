@@ -143,7 +143,7 @@ def fetch_recent_games(days_back: int = 3) -> List[Dict]:
         Flat list of all game dicts across the date range.
     """
     all_games = []
-    for i in range(days_back, -1, -1):
+    for i in range(days_back, 0, -1):
         date = (datetime.today() - timedelta(days=i)).strftime("%Y-%m-%d")
         games = fetch_scores(date)
         for g in games:
