@@ -228,6 +228,8 @@ def generate_daily_briefing(
         embedder: MLBEmbedder,
         date: str = None,
         classifier=None,
+        X_hist: "np.ndarray | None" = None,
+        feature_names: "list | None" = None,
 ) -> str:
     """
     Generate a full daily MLB briefing — like an ESPN top-of-show segment.
@@ -273,13 +275,23 @@ def generate_daily_briefing(
 
     context = build_context_string(all_results[:10])   # cap at 10 chunks
 
+    # Generate novelty facts if historical data is available
+    facts_block = ""
+    if X_hist is not None and feature_names is not None:
+        from src.mlb_rag.novelty import generate_briefing_facts
+        game_chunks = [c for c, _ in all_results if c.chunk_type == "game_recap"]
+        facts_block = generate_briefing_facts(game_chunks, X_hist, feature_names)
+
+    novelty_section = f"\n\n{facts_block}" if facts_block else ""
+
     user_prompt = f"""CONTEXT (MLB data as of {date}):
-{context}
+{context}{novelty_section}
 
 Generate a complete daily MLB briefing for {date}. Structure it as:
 1. HEADLINE RESULTS - the 2-3 most notable outcomes
 2. STANDINGS WATCH - any interesting division races or movement
 3. STORYLINE OF THE DAY - one compelling narrative from the data
+4. CRAZY FACTS - weave in any notable facts from the NOTABLE FACTS section above in an engaging, broadcast-style way (e.g. "By the way, that was only the 4th time in three seasons we've seen..."). Skip this section if no facts were provided.
 
 Ground everything in the provided context."""
 

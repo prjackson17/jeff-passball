@@ -287,6 +287,8 @@ def build_game_recap_chunk(game: Dict) -> Optional[MLBChunk]:
             metadata={
                 "game_pk": game_pk,
                 "status": status,
+                "winning_pitcher_id": decisions.get("winner", {}).get("id"),
+                "winning_pitcher_name": decisions.get("winner", {}).get("fullName", ""),
                 **feat_dict,
             },
             chunk_type="game_recap"
