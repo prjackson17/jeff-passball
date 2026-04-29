@@ -14,11 +14,13 @@ Env vars:
                          (reranking skipped if not set/found)
     DATA_PATH          — path to game_features_all.npz
                          (novelty facts skipped if not set/found)
+    CACHE_PATH         — path to briefing cache JSON (default: data/briefing_cache.json)
 """
 
 import os
+import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
@@ -56,11 +58,8 @@ def initialize():
     _load_embedder()
     _load_classifier()
     _load_historical()
-    refresh()
 
-
-def refresh():
-    """Re-fetch recent games, rebuild vector store, regenerate briefing."""
+    # Always fetch recent games — needed for query even if briefing is cached
     days_back = int(os.environ.get("DAYS_BACK", 2))
     print(f"[Pipeline] Fetching last {days_back} day(s) of games...")
     chunks = ingest_mlb_data(days_back=days_back)
@@ -68,14 +67,47 @@ def refresh():
 
     if not game_chunks:
         _state.briefing = "No completed games found for the requested period."
-        _state.last_refresh = datetime.utcnow()
-        _state.ready = False
+        _state.last_refresh = datetime.now(timezone.utc)
         return
 
     print(f"[Pipeline] {len(game_chunks)} game recaps ingested. Building vector store...")
     _state.store = build_vector_store(chunks, embedder=_state.embedder, save=False)
+    _state.ready = True
 
-    print("[Pipeline] Generating briefing...")
+    # Use cached briefing if it was generated today — skip the Claude API call
+    cached = _load_cache()
+    if cached:
+        print("[Pipeline] Using today's cached briefing — skipping Claude API call.")
+        _state.briefing = cached["briefing"]
+        _state.last_refresh = datetime.fromisoformat(cached["last_refresh"])
+    else:
+        print("[Pipeline] No fresh cache — generating briefing...")
+        _generate_and_cache(game_chunks)
+
+    print("[Pipeline] Ready.")
+
+
+def refresh():
+    """Re-fetch recent games, rebuild vector store, force-regenerate briefing."""
+    days_back = int(os.environ.get("DAYS_BACK", 2))
+    print(f"[Pipeline] Refreshing — fetching last {days_back} day(s) of games...")
+    chunks = ingest_mlb_data(days_back=days_back)
+    game_chunks = [c for c in chunks if c.chunk_type == "game_recap"]
+
+    if not game_chunks:
+        _state.briefing = "No completed games found for the requested period."
+        _state.last_refresh = datetime.now(timezone.utc)
+        _state.ready = False
+        return
+
+    _state.store = build_vector_store(chunks, embedder=_state.embedder, save=False)
+    _state.ready = True
+    _generate_and_cache(game_chunks)
+    print("[Pipeline] Refresh complete.")
+
+
+def _generate_and_cache(game_chunks):
+    """Call Claude to generate the briefing and write it to disk."""
     _state.briefing = generate_daily_briefing(
         _state.store,
         _state.embedder,
@@ -83,10 +115,48 @@ def refresh():
         X_hist=_state.X_hist,
         feature_names=_state.feature_names,
     )
-    _state.last_refresh = datetime.utcnow()
-    _state.ready = True
-    print("[Pipeline] Ready.")
+    _state.last_refresh = datetime.now(timezone.utc)
+    _save_cache()
 
+
+# ── Disk cache ─────────────────────────────────────────────────────────────────
+
+def _cache_path() -> str:
+    return os.environ.get("CACHE_PATH", "data/briefing_cache.json").strip()
+
+
+def _load_cache() -> Optional[dict]:
+    """Return cached briefing dict if it was generated today (UTC), else None."""
+    path = _cache_path()
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if data.get("date") == datetime.now(timezone.utc).strftime("%Y-%m-%d"):
+            return data
+    except Exception as e:
+        print(f"[Pipeline] Cache read error: {e}")
+    return None
+
+
+def _save_cache():
+    """Persist today's briefing to disk."""
+    path = _cache_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    try:
+        with open(path, "w") as f:
+            json.dump({
+                "date": _state.last_refresh.strftime("%Y-%m-%d"),
+                "briefing": _state.briefing,
+                "last_refresh": _state.last_refresh.isoformat(),
+            }, f)
+        print(f"[Pipeline] Briefing cached → {path}")
+    except Exception as e:
+        print(f"[Pipeline] Cache write error: {e}")
+
+
+# ── Model loaders ──────────────────────────────────────────────────────────────
 
 def _load_embedder():
     finetuned = os.environ.get("EMBEDDER_PATH", "").strip()
