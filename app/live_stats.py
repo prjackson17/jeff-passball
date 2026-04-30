@@ -197,22 +197,25 @@ def _fetch_player_stats(player_id: int) -> str:
 
 _leaders_cache: dict = {"text": None, "ts": 0.0}
 
-_BATTING_CATS  = ["homeRuns", "battingAverage", "rbi", "onBasePlusSlugging",
-                  "stolenBases", "runs", "hits"]
-_PITCHING_CATS = ["earnedRunAverage", "strikeouts", "wins", "whip", "saves"]
-
-_CAT_LABELS = {
-    "homeRuns": "HR", "battingAverage": "AVG", "rbi": "RBI",
-    "onBasePlusSlugging": "OPS", "stolenBases": "SB", "runs": "R", "hits": "H",
-    "earnedRunAverage": "ERA", "strikeouts": "K", "wins": "W",
-    "whip": "WHIP", "saves": "SV",
-}
+# Each entry: (sort_stat, display_label, group, sort_order, response_stat_key)
+# Using /stats with sortStat is more reliable than /stats/leaders for in-progress seasons.
+_LEADER_STATS = [
+    ("homeRuns",          "HR",   "hitting",  "desc", "homeRuns"),
+    ("battingAverage",    "AVG",  "hitting",  "desc", "avg"),
+    ("rbi",               "RBI",  "hitting",  "desc", "rbi"),
+    ("onBasePlusSlugging","OPS",  "hitting",  "desc", "ops"),
+    ("stolenBases",       "SB",   "hitting",  "desc", "stolenBases"),
+    ("earnedRunAverage",  "ERA",  "pitching", "asc",  "era"),
+    ("strikeOuts",        "K",    "pitching", "desc", "strikeOuts"),
+    ("wins",              "W",    "pitching", "desc", "wins"),
+    ("saves",             "SV",   "pitching", "desc", "saves"),
+]
 
 _RANKINGS_KEYWORDS = {
     "mvp", "best", "leader", "leaders", "top", "rank", "ranking", "rankings",
     "award", "cy young", "cyyoung", "most", "leading", "who leads", "stat",
     "stats", "leaderboard", "leaderboards", "best player", "best hitter",
-    "best pitcher", "slugger", "ace",
+    "best pitcher", "slugger", "ace", "home run race", "hr race", "chase",
 }
 
 
@@ -226,37 +229,44 @@ def _fetch_stat_leaders(limit: int = 5) -> str:
     if _leaders_cache["text"] and now - _leaders_cache["ts"] < _STANDINGS_TTL:
         return _leaders_cache["text"]
 
-    categories = ",".join(_BATTING_CATS + _PITCHING_CATS)
-    data = _get("/stats/leaders", params={
-        "leaderCategories": categories,
-        "leaderGameTypes": "R",
-        "season": _SEASON,
-        "sportId": 1,
-        "limit": limit,
-    })
-    if not data:
-        return ""
+    batting_sections = []
+    pitching_sections = []
 
-    sections = {"BATTING LEADERS": [], "PITCHING LEADERS": []}
-    for group in data.get("leagueLeaders", []):
-        cat   = group.get("leaderCategory", "")
-        label = _CAT_LABELS.get(cat, cat)
-        dest  = "PITCHING LEADERS" if cat in _PITCHING_CATS else "BATTING LEADERS"
+    for sort_stat, label, group, order, stat_key in _LEADER_STATS:
+        data = _get("/stats", params={
+            "stats": "season",
+            "group": group,
+            "gameType": "R",
+            "season": _SEASON,
+            "sortStat": sort_stat,
+            "order": order,
+            "limit": limit,
+            "sportId": 1,
+        })
+        if not data:
+            continue
+        splits = (data.get("stats") or [{}])[0].get("splits", [])
+        if not splits:
+            continue
         entries = []
-        for entry in group.get("leaders", [])[:limit]:
-            name  = entry.get("person", {}).get("fullName", "?")
-            team  = entry.get("team", {}).get("clubName", "?")
-            value = entry.get("value", "?")
-            rank  = entry.get("rank", "?")
-            entries.append(f"  {rank}. {name} ({team}) — {value}")
-        if entries:
-            sections[dest].append(f"{label}:\n" + "\n".join(entries))
+        for i, split in enumerate(splits[:limit], 1):
+            name  = split.get("player", {}).get("fullName", "?")
+            team  = split.get("team", {}).get("name", "?")
+            value = split.get("stat", {}).get(stat_key, "?")
+            entries.append(f"  {i}. {name} ({team}) — {value}")
+        section = f"{label}:\n" + "\n".join(entries)
+        if group == "hitting":
+            batting_sections.append(section)
+        else:
+            pitching_sections.append(section)
 
     lines = [f"MLB STAT LEADERS — {_SEASON} Season (top {limit}):"]
-    for section, groups in sections.items():
-        if groups:
-            lines.append(f"\n{section}:")
-            lines.extend(groups)
+    if batting_sections:
+        lines.append("\nBATTING LEADERS:")
+        lines.extend(batting_sections)
+    if pitching_sections:
+        lines.append("\nPITCHING LEADERS:")
+        lines.extend(pitching_sections)
 
     result = "\n".join(lines)
     _leaders_cache["text"] = result
