@@ -87,8 +87,8 @@ def _extract_names(query: str) -> list:
     names = []
     i = 0
     while i < len(words) - 1:
-        w1 = re.sub(r"[^A-Za-z]", "", words[i])
-        w2 = re.sub(r"[^A-Za-z]", "", words[i + 1])
+        w1 = re.sub(r"[^A-Za-z]", "", words[i]).title()
+        w2 = re.sub(r"[^A-Za-z]", "", words[i + 1]).title()
         if (w1 and w2
                 and re.match(r"^[A-Z][a-z]{1,}$", w1)
                 and re.match(r"^[A-Z][a-z]{1,}$", w2)
