@@ -1,10 +1,17 @@
-## MLB Daily Briefing | April 27, 2026
-### HEADLINE RESULTS
-Good morning, baseball fans. We had some high-scoring affairs yesterday, headlined by Kansas City's 11-9 extra-inning thriller over the Angels. The Royals needed ten frames to put this one away, with Lucas Erceg earning the win in relief. Out in the Motor City, Detroit kept rolling with an 8-3 victory over Cincinnati, as Brant Hurter got the decision. That's a significant win for the Tigers, who handed the division-leading Reds a loss. And up in Boston, the Red Sox took down Baltimore 5-3, with Connelly Early picking up the win and Aroldis Chapman nailing down the save.
+# MLB Daily Briefing | April 29, 2026
 
-### STANDINGS WATCH
-The most compelling race right now is in the National League Central, where Cincinnati sits at 18-10 (.643) atop the division, but they've got the Cubs breathing down their neck just one game back at 17-11. Despite yesterday's loss to Detroit, the Reds still control their destiny. Meanwhile, the AL East has the Yankees firmly in command at 18-10, matching Cincinnati's league-best record, with Tampa Bay 1.5 games back. Baltimore's loss yesterday drops them to 13-15, now five games out.
+## HEADLINE RESULTS
 
-### STORYLINE OF THE DAY
-The Tigers are making noise. Detroit's win over Cincinnati pulls them into a flat-footed tie atop their division with Cleveland, both teams sitting at 15-14. That extra-inning victory for Kansas City also matters—the Royals are trying to climb out of the basement at 11-17, and every win counts when you're 3.5 games back.
+**King Tuck delivers the drama in LA.** Kyle Tucker, the Dodgers' new right fielder, christened his Los Angeles tenure in style on April 27th with a two-out, two-RBI walk-off that lifted the Dodgers past the Marlins 5-4. Those around the organization have learned not to expect emotional fireworks from Tucker, but he's delivering when it matters most.
 
+**Cardinals bombardment in Pittsburgh.** St. Louis put on an offensive clinic Tuesday night, pounding the Pirates 11-7 at PNC Park. The Cardinals' entire lineup contributed, with homers flying from Ryan O'Hearn, Konnor Griffin, Nolan Gorman, and Victor Scott II. Kyle Leahy was brilliant early, striking out seven through five scoreless frames before being tested in the sixth.
+
+**Brewers flex small-ball muscle.** Milwaukee demolished Arizona 13-2 on Tuesday using manufactured runs and timely hitting. Sal Frelick added a solo shot for good measure. With Jackson Chourio and Andrew Vaughn nearing returns from injury, those power bats could make an already dangerous Brewers attack even more formidable.
+
+## STANDINGS WATCH
+
+**The National League is a powerhouse showcase.** The Braves lead baseball at 21-9 (.700), while both the Dodgers and Yankees sit at 20-10 (.667). Los Angeles holds a slim half-game edge over San Diego (19-10) in what's shaping up as a West Coast slugfest. Cincinnati leads the Central at 19-10, 1.5 games ahead of the Cubs.
+
+## STORYLINE OF THE DAY
+
+**Tucker's walk-off validates Dodgers' blockbuster move.** After the fanfare and expectations that came with acquiring one of baseball's premier talents, Kyle Tucker finally gave Dodger Stadium its signature moment—a clutch, two-out walk-off. As one observer noted, "He needed it." Now the reign truly begins.
