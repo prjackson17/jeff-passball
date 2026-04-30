@@ -178,6 +178,8 @@ def _fetch_player_stats(player_id: int) -> str:
         team = (person.get("currentTeam") or {}).get("name", "")
 
     lines = []
+    if team:
+        lines.append(f"[CURRENT ROSTER FACT — {_SEASON}] {name} plays for the {team}. Use this team name, not your training data.")
     if data_h:
         splits = (data_h.get("stats") or [{}])[0].get("splits", [])
         line = _format_hitting(splits, name, team)
