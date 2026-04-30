@@ -82,22 +82,10 @@
     .md-body hr { border: none; border-top: 1px solid #1f3a55; margin: 1em 0; }
     .md-body code { background: #0f1f30; color: #7dd3fc; padding: 1px 5px; border-radius: 3px; font-size: 0.88em; }
 
-    /* ── Top row: briefing + scores ── */
-    #top-row {
-      display: grid;
-      grid-template-columns: 1fr 260px;
-      gap: 20px;
-      margin-bottom: 28px;
-      align-items: start;
-    }
-    @media (max-width: 660px) {
-      #top-row { grid-template-columns: 1fr; }
-    }
-
     /* ── Briefing card ── */
     #briefing-card {
       background: #152535; border: 1px solid #1f3a55;
-      border-radius: 8px; padding: 22px 26px;
+      border-radius: 8px; padding: 22px 26px; margin-bottom: 28px;
     }
     #briefing-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -105,26 +93,30 @@
     }
     #last-updated { font-size: 0.75rem; color: #5a7a99; }
 
-    /* ── Scores card ── */
-    #scores-card {
-      background: #152535; border: 1px solid #1f3a55;
-      border-radius: 8px; padding: 16px 18px;
+    /* ── Scores section ── */
+    #scores-section { margin-bottom: 28px; }
+    #scores-header {
+      display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px;
     }
-    #scores-date { font-size: 0.72rem; color: #5a7a99; margin-bottom: 12px; }
-    .score-row {
+    #scores-date { font-size: 0.72rem; color: #5a7a99; }
+    #scores-grid {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 2px 10px;
-      padding: 6px 0;
-      border-bottom: 1px solid #1a2e44;
-      font-size: 0.83rem;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 8px;
     }
-    .score-row:last-child { border-bottom: none; }
-    .score-team { color: #cdd8e3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .score-team.winner { color: #e8edf2; font-weight: 700; }
-    .score-num { color: #cdd8e3; text-align: right; font-variant-numeric: tabular-nums; }
-    .score-num.winner { color: #e8edf2; font-weight: 700; }
-    .score-status { grid-column: 1 / -1; font-size: 0.7rem; color: #3a5a78; margin-top: 1px; }
+    .game-card {
+      background: #152535; border: 1px solid #1f3a55;
+      border-radius: 7px; padding: 10px 12px;
+    }
+    .game-line {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 6px; font-size: 0.82rem; line-height: 1.5;
+    }
+    .game-line .team { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8ba5bf; }
+    .game-line .team.winner { color: #e8edf2; font-weight: 700; }
+    .game-line .score { font-variant-numeric: tabular-nums; color: #8ba5bf; min-width: 1.5ch; text-align: right; }
+    .game-line .score.winner { color: #e8edf2; font-weight: 700; }
+    .game-status { font-size: 0.68rem; color: #3a5a78; margin-top: 4px; }
 
     /* ── Chat card ── */
     #chat-card {
@@ -273,27 +265,26 @@
 
 <div class="container">
 
-  <!-- Top row: briefing + scores -->
-  <div id="top-row">
-
-    <div id="briefing-card">
-      <div id="briefing-header">
-        <div class="section-title">Today's Briefing</div>
-        <span id="last-updated"></span>
-      </div>
-      <div id="briefing-text">
-        <div class="loader"><span class="ball">⚾</span> Loading briefing…</div>
-      </div>
+  <!-- Briefing -->
+  <div id="briefing-card">
+    <div id="briefing-header">
+      <div class="section-title">Today's Briefing</div>
+      <span id="last-updated"></span>
     </div>
+    <div id="briefing-text">
+      <div class="loader"><span class="ball">⚾</span> Loading briefing…</div>
+    </div>
+  </div>
 
-    <div id="scores-card">
+  <!-- Scores grid -->
+  <div id="scores-section">
+    <div id="scores-header">
       <div class="section-title">Yesterday's Scores</div>
-      <div id="scores-date"></div>
-      <div id="scores-list">
-        <div class="loader"><span class="ball">⚾</span> Loading…</div>
-      </div>
+      <span id="scores-date"></span>
     </div>
-
+    <div id="scores-grid">
+      <div class="loader"><span class="ball">⚾</span> Loading scores…</div>
+    </div>
   </div>
 
   <!-- Chat -->
@@ -478,29 +469,33 @@
   }
 
   async function loadScores() {
-    const list = document.getElementById('scores-list');
+    const grid   = document.getElementById('scores-grid');
     const dateEl = document.getElementById('scores-date');
     try {
       const r = await fetch('/api/scores');
       const d = await r.json();
       dateEl.textContent = d.date || '';
       if (!d.games || d.games.length === 0) {
-        list.innerHTML = '<p style="color:#3a5a78;font-style:italic;font-size:0.85rem">No games yesterday.</p>';
+        grid.innerHTML = '<p style="color:#3a5a78;font-style:italic;font-size:0.85rem">No games yesterday.</p>';
         return;
       }
-      list.innerHTML = d.games.map(g => {
+      grid.innerHTML = d.games.map(g => {
         const aw = g.away_winner;
         return `
-          <div class="score-row">
-            <span class="score-team ${aw ? '' : 'winner'}">${g.home_team}</span>
-            <span class="score-num ${aw ? '' : 'winner'}">${g.home_score ?? '—'}</span>
-            <span class="score-team ${aw ? 'winner' : ''}">${g.away_team}</span>
-            <span class="score-num ${aw ? 'winner' : ''}">${g.away_score ?? '—'}</span>
-            <span class="score-status">${g.status}</span>
+          <div class="game-card">
+            <div class="game-line">
+              <span class="team ${aw ? 'winner' : ''}">${g.away_team}</span>
+              <span class="score ${aw ? 'winner' : ''}">${g.away_score ?? '—'}</span>
+            </div>
+            <div class="game-line">
+              <span class="team ${aw ? '' : 'winner'}">${g.home_team}</span>
+              <span class="score ${aw ? '' : 'winner'}">${g.home_score ?? '—'}</span>
+            </div>
+            <div class="game-status">${g.status}</div>
           </div>`;
       }).join('');
     } catch {
-      list.innerHTML = '<p style="color:#e05a5a;font-size:0.85rem">Failed to load scores.</p>';
+      grid.innerHTML = '<p style="color:#e05a5a;font-size:0.85rem">Failed to load scores.</p>';
     }
   }
 

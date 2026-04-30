@@ -321,9 +321,9 @@ def fetch_yesterday_scores() -> list:
             home = g.get("teams", {}).get("home", {})
             status = g.get("status", {}).get("detailedState", "")
             games.append({
-                "away_team":  away.get("team", {}).get("clubName", "?"),
+                "away_team":  away.get("team", {}).get("name", "?"),
                 "away_score": away.get("score"),
-                "home_team":  home.get("team", {}).get("clubName", "?"),
+                "home_team":  home.get("team", {}).get("name", "?"),
                 "home_score": home.get("score"),
                 "status":     status,
                 "away_winner": (
