@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 import app.pipeline as pipeline
 from app.live_stats import augment_query_context, fetch_yesterday_scores
+from app.historical_lookup import augment_historical_context
 from src.mlb_rag.commentary import answer_query
 import src.mlb_rag.commentary as commentary
 
@@ -74,6 +75,9 @@ def query(req: QueryRequest):
     store = s.query_store or s.store
 
     extra = augment_query_context(req.question)
+    historical = augment_historical_context(req.question)
+    if historical:
+        extra = historical + ("\n\n" + extra if extra else "")
 
     # Build history for Claude — include current question as last entry
     history = [{"role": m.role, "content": m.content} for m in req.history]
