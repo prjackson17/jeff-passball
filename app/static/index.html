@@ -40,6 +40,9 @@
     }
     .badge.on   { background: #0d2e1a; color: #4caf82; border-color: #1a5c38; }
     .badge.warn { background: #2e1a0d; color: #e0a050; border-color: #5c3a1a; }
+    .badge.clickable { cursor: pointer; user-select: none; transition: opacity 0.15s; }
+    .badge.clickable:hover { opacity: 0.75; }
+    .badge.clickable:active { opacity: 0.5; }
 
     .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 0; }
 
@@ -309,18 +312,55 @@
     return row;
   }
 
+  let _modelState = { active: null, local_available: false, local_model: '' };
+
+  function renderModelBadge() {
+    const { active, local_available, local_model } = _modelState;
+    const isLocal = active === 'local';
+    const label   = isLocal ? `${local_model} ✓` : 'Claude API';
+    const cls     = `badge ${isLocal ? 'on' : ''} ${local_available ? 'clickable' : ''}`.trim();
+    const title   = local_available
+      ? (isLocal ? 'Click to switch to Claude' : `Click to switch to ${local_model}`)
+      : 'Local LLM not configured';
+    return `<span id="llm-badge" class="${cls}" title="${title}" ${local_available ? 'onclick="toggleModel()"' : ''}>${label}</span>`;
+  }
+
   async function loadHealth() {
     try {
-      const r = await fetch('/api/health');
-      const d = await r.json();
+      const [rh, rm] = await Promise.all([fetch('/api/health'), fetch('/api/model')]);
+      const d  = await rh.json();
+      const dm = await rm.json();
+      _modelState = dm;
       document.getElementById('badges').innerHTML = [
         `<span class="badge ${d.embedder === 'finetuned' ? 'on' : 'warn'}">${d.embedder === 'finetuned' ? 'Fine-tuned ✓' : 'Base model'}</span>`,
         `<span class="badge ${d.classifier ? 'on' : ''}">${d.classifier ? 'Reranker ✓' : 'No reranker'}</span>`,
         `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty ✓' : 'No novelty'}</span>`,
         `<span class="badge ${d.query_store_ready ? 'on' : ''}">${d.query_store_ready ? `${d.query_days}-day window ✓` : 'Short window'}</span>`,
-        `<span class="badge ${d.local_model ? 'on' : ''}">${d.local_model ? `Local LLM ✓` : 'Claude API'}</span>`,
+        renderModelBadge(),
       ].join('');
     } catch {}
+  }
+
+  async function toggleModel() {
+    const badge = document.getElementById('llm-badge');
+    if (!badge) return;
+    badge.style.opacity = '0.4';
+    badge.onclick = null;
+    try {
+      const r = await fetch('/api/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_local: _modelState.active !== 'local' }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        _modelState.active = d.active;
+        badge.outerHTML = renderModelBadge();
+      }
+    } catch {
+      badge.style.opacity = '1';
+      badge.onclick = toggleModel;
+    }
   }
 
   async function loadBriefing() {

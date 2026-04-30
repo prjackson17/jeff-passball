@@ -30,6 +30,20 @@ from src.mlb_rag.trend_classifier import TrendClassifierMLP, ClassifierConfig
 CLAUDE_MODEL = "claude-sonnet-4-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
+# Runtime flag — toggled via /api/model without a server restart.
+# Initialised from OLLAMA_MODEL env var so start_server.sh / start_all.sh
+# still work as before.
+_use_local_llm: bool = bool(os.environ.get("OLLAMA_MODEL", "").strip())
+
+
+def set_llm_mode(use_local: bool) -> None:
+    global _use_local_llm
+    _use_local_llm = use_local
+
+
+def get_llm_mode() -> str:
+    return "local" if _use_local_llm else "claude"
+
 
 def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 1000) -> str:
     """Call Claude with a single user turn."""
@@ -75,8 +89,8 @@ def _call_ollama_messages(system_prompt: str, messages: list, max_tokens: int = 
 
 
 def _call_llm_messages(system_prompt: str, messages: list, max_tokens: int = 1000) -> str:
-    """Route to local ollama or Claude depending on OLLAMA_MODEL env var."""
-    if os.environ.get("OLLAMA_MODEL", "").strip():
+    """Route to local ollama or Claude based on the runtime _use_local_llm flag."""
+    if _use_local_llm and os.environ.get("OLLAMA_MODEL", "").strip():
         return _call_ollama_messages(system_prompt, messages, max_tokens)
     return _call_claude_messages(system_prompt, messages, max_tokens)
 

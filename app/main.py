@@ -22,6 +22,7 @@ from pydantic import BaseModel
 import app.pipeline as pipeline
 from app.live_stats import augment_query_context
 from src.mlb_rag.commentary import answer_query
+import src.mlb_rag.commentary as commentary
 
 
 @asynccontextmanager
@@ -99,6 +100,28 @@ def refresh():
         "status": "ok",
         "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
     }
+
+
+class ModelRequest(BaseModel):
+    use_local: bool
+
+
+@app.get("/api/model")
+def get_model():
+    local_available = bool(os.environ.get("OLLAMA_MODEL", "").strip())
+    return {
+        "active": commentary.get_llm_mode(),
+        "local_available": local_available,
+        "local_model": os.environ.get("OLLAMA_MODEL", ""),
+    }
+
+
+@app.post("/api/model")
+def set_model(req: ModelRequest):
+    if req.use_local and not os.environ.get("OLLAMA_MODEL", "").strip():
+        raise HTTPException(status_code=400, detail="OLLAMA_MODEL is not configured on this server")
+    commentary.set_llm_mode(req.use_local)
+    return {"active": commentary.get_llm_mode()}
 
 
 @app.get("/api/health")
