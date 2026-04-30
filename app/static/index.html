@@ -56,7 +56,13 @@
       display: flex; align-items: center; gap: 12px;
       color: #4a6a88; font-style: italic; font-size: 0.95rem; padding: 8px 0;
     }
-    .loader .ball { font-size: 1.6rem; display: inline-block; animation: spin 1s linear infinite; }
+    .loader .ball {
+      font-size: 1.5rem;
+      width: 1.8rem; height: 1.8rem;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      animation: spin 1.1s linear infinite;
+    }
 
     /* ── Markdown styles ── */
     .md-body { line-height: 1.75; font-size: 0.95rem; color: #cdd8e3; }
@@ -166,12 +172,65 @@
     #submit-btn:disabled { opacity: 0.5; cursor: default; }
 
     .error { color: #e05a5a !important; font-style: normal !important; }
+
+    /* ── Jeff Passan memorial watermark ── */
+    #passan-watermark {
+      position: fixed;
+      bottom: 8%;
+      right: -2%;
+      font-size: 9rem;
+      font-weight: 900;
+      color: rgba(255, 255, 255, 0.025);
+      transform: rotate(-18deg);
+      pointer-events: none;
+      z-index: 0;
+      white-space: nowrap;
+      user-select: none;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    /* ── Passan face (bottom-right corner) ── */
+    #passan-corner {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 220px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.07;
+      filter: grayscale(100%) contrast(1.2);
+      display: none; /* shown by JS if src is set */
+    }
+
+    .header-sub {
+      font-size: 0.72rem;
+      color: #4a6a88;
+      margin-top: 3px;
+      font-style: italic;
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px 20px 0;
+      font-size: 0.72rem;
+      color: #2a4560;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
 
+<!-- Jeff Passan's spiritual presence -->
+<div id="passan-watermark">JEFF PASSAN</div>
+<!-- Replace src with an actual photo of Jeff Passan for full effect -->
+<img id="passan-corner" src="" alt="Jeff Passan, watching over us" />
+
 <header>
-  <h1>⚾ MLB <span>Daily Briefing</span></h1>
+  <div>
+    <h1>⚾ MLB <span>Daily Briefing</span></h1>
+    <div class="header-sub">a jeff-passball production &mdash; not affiliated with the real Jeff Passan (unfortunately)</div>
+  </div>
   <div class="badges" id="badges"><span class="badge">Loading…</span></div>
 </header>
 
@@ -206,6 +265,11 @@
   </div>
 
 </div>
+
+<footer>
+  Powered by MLB Stats API, FAISS, and the eternal energy of Jeff Passan's Twitter fingers.<br>
+  Jeff Passan has not endorsed, reviewed, or acknowledged the existence of this project.
+</footer>
 
 <script>
   marked.setOptions({ breaks: true });
@@ -318,6 +382,12 @@
       btn.disabled = false;
       input.focus();
     }
+  }
+
+  // Show corner photo if src is set
+  const passanImg = document.getElementById('passan-corner');
+  if (passanImg.src && passanImg.src !== window.location.href) {
+    passanImg.style.display = 'block';
   }
 
   loadHealth();
