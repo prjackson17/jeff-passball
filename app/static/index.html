@@ -409,7 +409,7 @@
       el.innerHTML = '';
       el.appendChild(renderMd(d.briefing || '_No briefing available._'));
       if (d.last_refresh) {
-        const dt = new Date(d.last_refresh + 'Z');
+        const dt = new Date(d.last_refresh);
         ts.textContent = 'Updated ' + dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
       }
     } catch {
