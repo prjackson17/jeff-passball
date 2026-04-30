@@ -95,6 +95,27 @@ def _call_llm_messages(system_prompt: str, messages: list, max_tokens: int = 100
     return _call_claude_messages(system_prompt, messages, max_tokens)
 
 
+# ── Query expansion for extreme-stat questions ────────────────────────────────
+
+_EXTRA_QUERIES: list = [
+    ({"longest", "most innings", "extra inning", "marathon", "went long"},
+     "extra innings game went 10 11 12 13 innings"),
+    ({"most runs", "highest scoring", "blowout", "lopsided", "biggest win"},
+     "high scoring blowout many runs big margin"),
+    ({"walk-off", "walkoff", "walk off", "comeback", "came back"},
+     "walk-off win comeback last inning victory"),
+    ({"shutout", "shut out", "no-hit", "no hitter", "perfect game"},
+     "shutout no hits pitcher dominant"),
+    ({"closest", "one run", "tight", "squeaker"},
+     "one run game close tight final"),
+]
+
+
+def _extra_retrieval_queries(query: str) -> list[str]:
+    q = query.lower()
+    return [rq for keywords, rq in _EXTRA_QUERIES if any(kw in q for kw in keywords)]
+
+
 # ── Prompt Templates ───────────────────────────────────────────────────────────
 
 BROADCASTER_SYSTEM = """You are a knowledgeable MLB broadcaster giving a daily briefing.
@@ -248,6 +269,17 @@ def answer_query(
         Generated commentary string.
     """
     results = query_store(query, store, embedder, top_k=top_k)
+
+    # Supplementary retrieval for extreme-stat questions (longest game, etc.)
+    extra_qs = _extra_retrieval_queries(query)
+    if extra_qs:
+        seen = {chunk.text for chunk, _ in results}
+        for eq in extra_qs:
+            for chunk, score in query_store(eq, store, embedder, top_k=6):
+                if chunk.text not in seen:
+                    results.append((chunk, score))
+                    seen.add(chunk.text)
+
     if classifier is not None:
         results = rerank_with_classifier(results, classifier)
 
