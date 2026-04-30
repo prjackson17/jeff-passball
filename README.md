@@ -113,7 +113,7 @@ jeff-passball/
 └── example.md                 # Sample briefing output
 ```
 
-Checkpoints are stored on ACET at `/var/tmp/prj004/checkpoints/`:
+Checkpoints are stored on Bucknell University's machine at `/var/tmp/prj004/checkpoints/`:
 - `mlb-minilm-finetuned/` — fine-tuned sentence transformer
 - `trend_classifier.pt` — trained MLP
 
@@ -159,17 +159,61 @@ The briefing demo cell (Part 5.3) requires `ANTHROPIC_API_KEY`.
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
 
-# Claude for all calls (briefing + queries)
+# Option A: Claude for all calls (briefing + queries)
 bash scripts/start_server.sh [port]
 
-# Local Llama 3.1 8B for queries, Claude for daily briefing
+# Option B: Llama 3.1 8B for queries, Claude for daily briefing
 bash scripts/start_all.sh [port]
 ```
 
 The app runs at `http://localhost:8080`.  
 On ACET: `http://acet116-lnx-24.bucknell.edu:8080`
 
-### API Endpoints
+---
+
+## Local LLM (ollama + Llama 3.1 8B)
+
+The system supports routing per-query inference to a local **Llama 3.1 8B** model, reducing Claude API credit usage. The daily briefing stays on Claude (higher quality; runs once per day and is cached to disk).
+
+**Requirements:** ~5 GB VRAM (RTX 4070 tested), ollama binary in `/var/tmp/prj004/ollama/`.
+
+**One-time setup on ACET:**
+```bash
+# Download and extract ollama (v0.22.0)
+wget https://github.com/ollama/ollama/releases/download/v0.22.0/ollama-linux-amd64.tar.zst \
+     -O /tmp/ollama.tar.zst
+mkdir -p /var/tmp/prj004/ollama
+tar --use-compress-program=unzstd -xf /tmp/ollama.tar.zst -C /var/tmp/prj004/ollama/
+
+# Pull Llama 3.1 8B (~4.9 GB)
+OLLAMA_MODELS=/var/tmp/prj004/ollama_models \
+  /var/tmp/prj004/ollama/bin/ollama pull llama3.1:8b
+```
+
+**Running with local model:**
+```bash
+# start_all.sh handles daemon startup + model check automatically
+bash scripts/start_all.sh
+
+# Or manually:
+OLLAMA_MODELS=/var/tmp/prj004/ollama_models /var/tmp/prj004/ollama/bin/ollama serve &
+export OLLAMA_MODEL="llama3.1:8b"
+bash scripts/start_server.sh
+```
+
+**Runtime toggle:** The LLM badge in the UI header is clickable — switching between Claude and Llama 3.1 8B takes effect immediately without restarting the server. The active model is also exposed at `GET /api/model` and can be changed via `POST /api/model {"use_local": true}`.
+
+**Routing logic** (`src/mlb_rag/commentary.py`):
+```python
+def _call_llm_messages(system_prompt, messages, max_tokens=1000):
+    if _use_local_llm and os.environ.get("OLLAMA_MODEL", "").strip():
+        return _call_ollama_messages(system_prompt, messages, max_tokens)
+    return _call_claude_messages(system_prompt, messages, max_tokens)
+```
+
+---
+
+## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
@@ -181,12 +225,15 @@ On ACET: `http://acet116-lnx-24.bucknell.edu:8080`
 | `POST /api/model` | Toggle Claude ↔ local LLM at runtime |
 | `POST /api/refresh` | Force-regenerate the daily briefing |
 
-### Web App Features
+---
+
+## Web App Features
 
 Beyond the core RAG pipeline, the deployed app adds:
 - **Live standings** injected into every query context (5-min cache)
 - **Player season stats** auto-fetched when a name is detected in the query
-- **Stat leaderboards** injected for MVP/rankings queries
+- **Stat leaderboards** injected for MVP/rankings/HR-race queries
 - **Yesterday's scores** grid on the home page
-- **Historical queries** — "how many extra innings games in 2024?" answered directly from the NPZ archive (3-year aggregate support)
-- **Local LLM toggle** — clickable badge in the header switches between Claude and Llama 3.1 8B without a server restart
+- **Historical queries** — "how many extra innings games in 2024?" answered directly from the 7,800-game NPZ archive without an LLM guess
+- **Query expansion** — extreme-stat questions ("longest game", "biggest blowout") trigger supplementary FAISS retrieval passes before reranking
+- **Local LLM toggle** — clickable badge switches between Claude and Llama 3.1 8B at runtime
