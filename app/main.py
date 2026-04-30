@@ -110,6 +110,7 @@ def health():
         "novelty_enabled": s.novelty_enabled,
         "query_store_ready": s.query_store is not None,
         "query_days": int(os.environ.get("QUERY_DAYS_BACK", 14)),
+        "local_model": os.environ.get("OLLAMA_MODEL", ""),
         "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
         "ready": s.ready,
     }

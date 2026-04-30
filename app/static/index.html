@@ -318,6 +318,7 @@
         `<span class="badge ${d.classifier ? 'on' : ''}">${d.classifier ? 'Reranker ✓' : 'No reranker'}</span>`,
         `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty ✓' : 'No novelty'}</span>`,
         `<span class="badge ${d.query_store_ready ? 'on' : ''}">${d.query_store_ready ? `${d.query_days}-day window ✓` : 'Short window'}</span>`,
+        `<span class="badge ${d.local_model ? 'on' : ''}">${d.local_model ? `Local LLM ✓` : 'Claude API'}</span>`,
       ].join('');
     } catch {}
   }

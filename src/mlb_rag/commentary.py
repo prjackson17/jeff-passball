@@ -59,6 +59,28 @@ def _call_claude_messages(system_prompt: str, messages: list, max_tokens: int = 
     return resp.json()["content"][0]["text"]
 
 
+def _call_ollama_messages(system_prompt: str, messages: list, max_tokens: int = 1000) -> str:
+    """Call a local ollama model. OLLAMA_MODEL env var selects the model."""
+    model    = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+    base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": system_prompt}] + messages,
+        "stream": False,
+        "options": {"num_predict": max_tokens},
+    }
+    resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()["message"]["content"]
+
+
+def _call_llm_messages(system_prompt: str, messages: list, max_tokens: int = 1000) -> str:
+    """Route to local ollama or Claude depending on OLLAMA_MODEL env var."""
+    if os.environ.get("OLLAMA_MODEL", "").strip():
+        return _call_ollama_messages(system_prompt, messages, max_tokens)
+    return _call_claude_messages(system_prompt, messages, max_tokens)
+
+
 # ── Prompt Templates ───────────────────────────────────────────────────────────
 
 BROADCASTER_SYSTEM = """You are a knowledgeable MLB broadcaster giving a daily briefing.
@@ -231,7 +253,7 @@ def answer_query(
     else:
         messages = [{"role": "user", "content": query}]
 
-    return _call_claude_messages(system, messages)
+    return _call_llm_messages(system, messages)
 
 
 def generate_daily_briefing(
