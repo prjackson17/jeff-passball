@@ -253,7 +253,7 @@
         `<span class="badge ${d.embedder === 'finetuned' ? 'on' : 'warn'}">${d.embedder === 'finetuned' ? 'Fine-tuned ✓' : 'Base model'}</span>`,
         `<span class="badge ${d.classifier ? 'on' : ''}">${d.classifier ? 'Reranker ✓' : 'No reranker'}</span>`,
         `<span class="badge ${d.novelty_enabled ? 'on' : ''}">${d.novelty_enabled ? 'Novelty ✓' : 'No novelty'}</span>`,
-        `<span class="badge ${d.query_store_ready ? 'on' : ''}">${d.query_store_ready ? '14-day window ✓' : 'Short window'}</span>`,
+        `<span class="badge ${d.query_store_ready ? 'on' : ''}">${d.query_store_ready ? `${d.query_days}-day window ✓` : 'Short window'}</span>`,
       ].join('');
     } catch {}
   }
