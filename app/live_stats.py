@@ -11,7 +11,7 @@ every query. Three types of augmentation:
 import re
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 MLB_BASE = "https://statsapi.mlb.com/api/v1"
@@ -293,3 +293,46 @@ def augment_query_context(query: str) -> str:
             time.sleep(0.1)
 
     return "\n\n".join(parts)
+
+
+# ── Yesterday's scores ─────────────────────────────────────────────────────────
+
+_scores_cache: dict = {"games": None, "date": None}
+
+
+def fetch_yesterday_scores() -> list:
+    """Return a list of score dicts for yesterday's completed games, cached by date."""
+    yesterday = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    if _scores_cache["date"] == yesterday and _scores_cache["games"] is not None:
+        return _scores_cache["games"]
+
+    data = _get("/schedule", params={
+        "sportId": 1,
+        "date": yesterday,
+        "hydrate": "linescore",
+    })
+    if not data:
+        return []
+
+    games = []
+    for date_entry in data.get("dates", []):
+        for g in date_entry.get("games", []):
+            away = g.get("teams", {}).get("away", {})
+            home = g.get("teams", {}).get("home", {})
+            status = g.get("status", {}).get("detailedState", "")
+            games.append({
+                "away_team":  away.get("team", {}).get("clubName", "?"),
+                "away_score": away.get("score"),
+                "home_team":  home.get("team", {}).get("clubName", "?"),
+                "home_score": home.get("score"),
+                "status":     status,
+                "away_winner": (
+                    isinstance(away.get("score"), int)
+                    and isinstance(home.get("score"), int)
+                    and away["score"] > home["score"]
+                ),
+            })
+
+    _scores_cache["games"] = games
+    _scores_cache["date"]  = yesterday
+    return games

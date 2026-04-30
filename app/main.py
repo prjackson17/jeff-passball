@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import app.pipeline as pipeline
-from app.live_stats import augment_query_context
+from app.live_stats import augment_query_context, fetch_yesterday_scores
 from src.mlb_rag.commentary import answer_query
 import src.mlb_rag.commentary as commentary
 
@@ -89,6 +89,13 @@ def query(req: QueryRequest):
         extra_context=extra,
     )
     return {"answer": answer}
+
+
+@app.get("/api/scores")
+def get_scores():
+    from datetime import datetime, timedelta
+    yesterday = (datetime.today() - timedelta(days=1)).strftime("%B %d, %Y")
+    return {"date": yesterday, "games": fetch_yesterday_scores()}
 
 
 @app.post("/api/refresh")
