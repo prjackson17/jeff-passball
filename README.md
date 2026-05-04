@@ -20,14 +20,14 @@ The two neural components solve a specific gap in standard RAG: pure semantic si
        │
        ▼
  data_ingestion.py ──────────────────────────────────────────┐
-       │                                                      │
+       │                                                     │
   MLBChunks (text)                              GameFeatures (15 numerical)
-       │                                                      │
-       ▼                                                      ▼
+       │                                                     │
+       ▼                                                     ▼
  ┌─────────────────────────┐              ┌──────────────────────────────┐
  │  NEURAL COMPONENT 1     │              │  NEURAL COMPONENT 2          │
  │  Fine-tuned Embedder    │              │  TrendClassifier MLP         │
- │  all-MiniLM-L6-v2       │              │  [15 → 128 → 64 → 32 → 2]   │
+ │  all-MiniLM-L6-v2       │              │  [15 → 128 → 64 → 32 → 2]    │
  │  MNRL loss, lr=5e-6     │              │  Trained on 7,802 real games │
  │  Val Spearman: 0.844    │              │  Val macro F1: 0.9866        │
  └──────────┬──────────────┘              └─────────────┬────────────────┘
@@ -35,14 +35,14 @@ The two neural components solve a specific gap in standard RAG: pure semantic si
             ▼                                           │
      FAISS Vector Store                                 │
      (top-k retrieval)  ◄──────── reranker blends ──────┘
-            │                 score = sim + 0.25 × P(notable)
+            │             score = sim + 0.25 × P(notable)
             ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │  LLM  (Claude claude-sonnet-4-5  or  local Llama 3.1 8B)    │
-  │  Context: retrieved chunks + live standings + player stats  │
-  │  → Daily briefing (cached to disk, refreshed by cron)       │
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  LLM  (Claude claude-sonnet-4-5  or  local Llama 3.1 8B)        │
+  │  Context: retrieved chunks + live standings + player stats      │
+  │  → Daily briefing (cached to disk, refreshed by cron)           │
   │  → Interactive chat Q&A (multi-turn, with conversation history) │
-  └─────────────────────────────────────────────────────────────┘
+  └─────────────────────────────────────────────────────────────────┘ 
 ```
 
 ---
@@ -74,6 +74,8 @@ A 3-layer MLP (`[15 → 128 → 64 → 32 → 2]`, dropout=0.3) trained via a **
 | Val (2025) | 2,428 | **0.9866** |
 | Test (2026) | 419 | **~0.99** |
 
+Note: This component is overkill and really not necessary. However, it does provide a continuous probability of a game being "notable", rather than a binary decision.
+
 ---
 
 ## Results
@@ -84,7 +86,7 @@ Sample briefing output from April 29, 2026: [`example.md`](example.md)
 
 ---
 
-## File Structure
+## Repo File Structure
 
 ```
 jeff-passball/
@@ -113,7 +115,7 @@ jeff-passball/
 └── example.md                 # Sample briefing output
 ```
 
-Checkpoints are stored on Bucknell University's machine at `/var/tmp/prj004/checkpoints/`:
+Checkpoints default to `checkpoints/` in the repo root (configurable via `--out` in `train_classifier.py` and `CHECKPOINT_DIR` in `scripts/`):
 - `mlb-minilm-finetuned/` — fine-tuned sentence transformer
 - `trend_classifier.pt` — trained MLP
 
@@ -122,12 +124,8 @@ Checkpoints are stored on Bucknell University's machine at `/var/tmp/prj004/chec
 ## Setup
 
 ```bash
-# Activate the course environment on ACET
-conda activate csci357
-
-# Key dependencies (already in csci357):
-# torch, sentence-transformers, faiss-cpu, fastapi, uvicorn,
-# anthropic, wandb, scikit-learn, numpy, pandas, matplotlib, seaborn
+pip install torch sentence-transformers faiss-cpu fastapi uvicorn \
+            anthropic wandb scikit-learn numpy pandas matplotlib seaborn
 ```
 
 `ANTHROPIC_API_KEY` must be set in your environment for the daily briefing. Queries can optionally run through a local Llama 3.1 8B model via ollama (see below).
@@ -166,8 +164,7 @@ bash scripts/start_server.sh [port]
 bash scripts/start_all.sh [port]
 ```
 
-The app runs at `http://localhost:8080`.  
-On ACET: `http://acet116-lnx-24.bucknell.edu:8080`
+The app runs at `http://localhost:8080`.
 
 ---
 
@@ -175,19 +172,12 @@ On ACET: `http://acet116-lnx-24.bucknell.edu:8080`
 
 The system supports routing per-query inference to a local **Llama 3.1 8B** model, reducing Claude API credit usage. The daily briefing stays on Claude (higher quality; runs once per day and is cached to disk).
 
-**Requirements:** ~5 GB VRAM (RTX 4070 tested), ollama binary in `/var/tmp/prj004/ollama/`.
+**Requirements:** ~5 GB VRAM, [ollama](https://ollama.com) installed and on your `PATH`.
 
-**One-time setup on ACET:**
+**One-time setup:**
 ```bash
-# Download and extract ollama (v0.22.0)
-wget https://github.com/ollama/ollama/releases/download/v0.22.0/ollama-linux-amd64.tar.zst \
-     -O /tmp/ollama.tar.zst
-mkdir -p /var/tmp/prj004/ollama
-tar --use-compress-program=unzstd -xf /tmp/ollama.tar.zst -C /var/tmp/prj004/ollama/
-
-# Pull Llama 3.1 8B (~4.9 GB)
-OLLAMA_MODELS=/var/tmp/prj004/ollama_models \
-  /var/tmp/prj004/ollama/bin/ollama pull llama3.1:8b
+# Install ollama from https://ollama.com, then pull the model (~4.9 GB)
+ollama pull llama3.1:8b
 ```
 
 **Running with local model:**
@@ -196,7 +186,7 @@ OLLAMA_MODELS=/var/tmp/prj004/ollama_models \
 bash scripts/start_all.sh
 
 # Or manually:
-OLLAMA_MODELS=/var/tmp/prj004/ollama_models /var/tmp/prj004/ollama/bin/ollama serve &
+ollama serve &
 export OLLAMA_MODEL="llama3.1:8b"
 bash scripts/start_server.sh
 ```
@@ -227,6 +217,20 @@ def _call_llm_messages(system_prompt, messages, max_tokens=1000):
 
 ---
 
+## Web App Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI + uvicorn |
+| Frontend | Vanilla JS / HTML (single-page, no framework) |
+| Vector store | FAISS (in-memory) |
+| Primary LLM | Anthropic Claude (`claude-sonnet-4-5`) |
+| Optional LLM | Llama 3.1 8B via ollama (query inference only) |
+| ML runtime | PyTorch + sentence-transformers |
+| Data | MLB Stats API (live) + `.npz` archive (historical) |
+
+---
+
 ## Web App Features
 
 Beyond the core RAG pipeline, the deployed app adds:
@@ -237,3 +241,11 @@ Beyond the core RAG pipeline, the deployed app adds:
 - **Historical queries** — "how many extra innings games in 2024?" answered directly from the 7,800-game NPZ archive without an LLM guess
 - **Query expansion** — extreme-stat questions ("longest game", "biggest blowout") trigger supplementary FAISS retrieval passes before reranking
 - **Local LLM toggle** — clickable badge switches between Claude and Llama 3.1 8B at runtime
+
+---
+
+## Issues and Discussion
+
+Though support for directly using MLB data was added to the "query" feature, there are often times where the models screw up and do not understand the query as the user intended. The models very quickly hallicinate.
+
+The MLP is overkill, especially for a binary problem. However, it is still a good demonstration of `wandb` best practices and model training. Most of the "neural network component" is done with fine-tuning the open source model to baseball lingo.
