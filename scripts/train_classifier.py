@@ -10,8 +10,8 @@ from src.mlb_rag.historical_data import load_features, GameFeatures
 from src.mlb_rag.auto_labeler import label_game
 from src.mlb_rag.trend_classifier import ClassifierConfig, TrendClassifierTrainer
 
-DATA_PATH     = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "game_features_all.npz")
-CHECKPOINT_DIR = "/var/tmp/prj004/checkpoints"
+DATA_PATH      = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "game_features_all.npz")
+CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "checkpoints"))
 
 def main():
     parser = argparse.ArgumentParser(description="Train trend classifier on historical game data")
