@@ -28,7 +28,7 @@ from src.mlb_rag.historical_data import GameFeatures, features_to_dataframe
 # Document your choices and reasoning in the notebook.
 
 THRESHOLDS = {
-    "close_game_margin":     2,     # margin <= this → notable (1-run, 2-run games)
+    "close_game_margin":     1,     # margin <= this → notable (1-run games only)
     "extra_innings":         True,  # any extra innings game → notable
     "offensive_explosion":   14,    # total runs >= this → notable (raised from 12)
     "dominant_so":           11,    # winning pitcher SO >= this → notable
