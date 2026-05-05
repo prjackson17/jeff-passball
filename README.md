@@ -15,7 +15,7 @@ The two neural components solve a specific gap in standard RAG: pure semantic si
 
 ## Video URL
 
-
+https://www.loom.com/share/2d0cdfbbb93a49b99b81a55998f616d6
 
 ---
 
