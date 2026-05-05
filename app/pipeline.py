@@ -10,8 +10,6 @@ Env vars:
     DAYS_BACK          — completed days of games to fetch (default: 2)
     EMBEDDER_PATH      — directory of fine-tuned sentence transformer
                          (falls back to all-MiniLM-L6-v2 if not set/found)
-    CLASSIFIER_PATH    — path to trend_classifier.pt
-                         (reranking skipped if not set/found)
     DATA_PATH          — path to game_features_all.npz
                          (novelty facts skipped if not set/found)
     CACHE_PATH         — path to briefing cache JSON (default: data/briefing_cache.json)
@@ -27,7 +25,7 @@ import numpy as np
 
 from src.mlb_rag.data_ingestion import ingest_mlb_data
 from src.mlb_rag.embedder import MLBEmbedder, build_vector_store
-from src.mlb_rag.commentary import load_classifier, generate_daily_briefing
+from src.mlb_rag.commentary import generate_daily_briefing
 from src.mlb_rag.historical_data import load_features, GameFeatures
 
 
@@ -36,13 +34,11 @@ class PipelineState:
     embedder: object = None
     store: object = None         # briefing store (DAYS_BACK days)
     query_store: object = None   # query store (QUERY_DAYS_BACK days, larger)
-    classifier: object = None
     X_hist: Optional[np.ndarray] = None
     feature_names: Optional[list] = None
     briefing: str = ""
     last_refresh: Optional[datetime] = None
     embedder_type: str = "none"    # "finetuned" | "base"
-    classifier_loaded: bool = False
     novelty_enabled: bool = False
     ready: bool = False
 
@@ -57,7 +53,6 @@ def get_state() -> PipelineState:
 def initialize():
     """Load models and fetch initial game data. Called once at startup."""
     _load_embedder()
-    _load_classifier()
     _load_historical()
 
     brief_days = int(os.environ.get("DAYS_BACK", 2))
@@ -128,7 +123,6 @@ def _generate_and_cache(game_chunks):
     _state.briefing = generate_daily_briefing(
         _state.store,
         _state.embedder,
-        classifier=_state.classifier,
         X_hist=_state.X_hist,
         feature_names=_state.feature_names,
     )
@@ -185,16 +179,6 @@ def _load_embedder():
         print("[Pipeline] Fine-tuned embedder not found — using base all-MiniLM-L6-v2")
         _state.embedder = MLBEmbedder(model_name="sentence-transformers/all-MiniLM-L6-v2")
         _state.embedder_type = "base"
-
-
-def _load_classifier():
-    path = os.environ.get("CLASSIFIER_PATH", "").strip()
-    if not path:
-        print("[Pipeline] CLASSIFIER_PATH not set — reranker disabled")
-        return
-    clf = load_classifier(path)
-    _state.classifier = clf
-    _state.classifier_loaded = clf is not None
 
 
 def _load_historical():

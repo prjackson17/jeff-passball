@@ -13,13 +13,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.mlb_rag.data_ingestion import ingest_mlb_data
 from src.mlb_rag.embedder import MLBEmbedder, build_vector_store
-from src.mlb_rag.commentary import load_classifier, generate_daily_briefing
+from src.mlb_rag.commentary import generate_daily_briefing
 from src.mlb_rag.historical_data import load_features, GameFeatures
 
-EMBEDDER_PATH   = "/var/tmp/prj004/checkpoints/mlb-minilm-finetuned"
-CLASSIFIER_PATH = "/var/tmp/prj004/checkpoints/trend_classifier.pt"
-DATA_PATH       = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "data", "game_features_all.npz")
+REPO_ROOT     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EMBEDDER_PATH = os.environ.get("EMBEDDER_PATH",
+                               os.path.join(REPO_ROOT, "checkpoints", "mlb-minilm-finetuned"))
+DATA_PATH     = os.environ.get("DATA_PATH",
+                               os.path.join(REPO_ROOT, "data", "game_features_all.npz"))
 
 
 def main():
@@ -57,14 +58,10 @@ def main():
     store    = build_vector_store(chunks, embedder=embedder, save=False)
     print(f"[Pipeline] Vector store: {store.index.ntotal} vectors.\n")
 
-    # ── Load classifier reranker ───────────────────────────────────────────────
-    clf = load_classifier(CLASSIFIER_PATH)
-
     # ── Generate briefing ──────────────────────────────────────────────────────
     print("[Pipeline] Generating briefing...\n" + "─" * 60)
     briefing = generate_daily_briefing(
         store, embedder,
-        classifier=clf,
         X_hist=X_hist,
         feature_names=feature_names,
     )

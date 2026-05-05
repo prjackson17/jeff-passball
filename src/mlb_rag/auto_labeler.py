@@ -99,6 +99,14 @@ def label_game(f: GameFeatures, rules: Dict = None, min_rules: int = 2) -> int:
     return int(fired >= min_rules)
 
 
+def notability_score(f: GameFeatures, rules: Dict = None) -> float:
+    """Return fraction of rules that fire (0.0–1.0), used for reranking."""
+    if rules is None:
+        rules = RULES
+    fired = sum(1 for fn in rules.values() if fn(f))
+    return fired / len(rules)
+
+
 def label_game_with_reasons(f: GameFeatures, min_rules: int = 2) -> Tuple[int, List[str]]:
     """
     Label a game and return which rules fired.

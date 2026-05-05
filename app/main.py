@@ -88,7 +88,6 @@ def query(req: QueryRequest):
         req.question,
         store,
         s.embedder,
-        classifier=s.classifier,
         history=history,
         extra_context=extra,
     )
@@ -140,7 +139,6 @@ def health():
     s = pipeline.get_state()
     return {
         "embedder": s.embedder_type,
-        "classifier": s.classifier_loaded,
         "novelty_enabled": s.novelty_enabled,
         "query_store_ready": s.query_store is not None,
         "query_days": int(os.environ.get("QUERY_DAYS_BACK", 14)),

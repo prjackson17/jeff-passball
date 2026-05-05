@@ -12,7 +12,6 @@ OLLAMA_MODEL_NAME="llama3.1:8b"
 OLLAMA_BASE_URL="http://localhost:11434"
 
 export EMBEDDER_PATH="${EMBEDDER_PATH:-$REPO_ROOT/checkpoints/mlb-minilm-finetuned}"
-export CLASSIFIER_PATH="${CLASSIFIER_PATH:-$REPO_ROOT/checkpoints/trend_classifier.pt}"
 export DATA_PATH="${DATA_PATH:-$REPO_ROOT/data/game_features_all.npz}"
 export QUERY_DAYS_BACK="${QUERY_DAYS_BACK:-30}"
 

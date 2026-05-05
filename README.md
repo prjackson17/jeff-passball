@@ -13,6 +13,12 @@ The two neural components solve a specific gap in standard RAG: pure semantic si
 
 ---
 
+## Video URL
+
+
+
+---
+
 ## Architecture
 
 ```
@@ -61,20 +67,23 @@ Fine-tuned on baseball-specific sentence pairs (game recap sentences ↔ query-s
 | Val Pearson | — | **0.908** |
 | Train loss | — | 0.2785 (10 epochs) |
 
-### 2. Trend Classifier MLP
+### 2. Rule-Based Notability Scorer
 
-A 3-layer MLP (`[15 → 128 → 64 → 32 → 2]`, dropout=0.3) trained via a **W&B grid search over 24 configurations** (hidden depth × dropout × BatchNorm × WeightedRandomSampler).
+Seven domain rules determine how "notable" a game is for reranking. Each rule that fires contributes 1/7 to a continuous notability score (0.0–1.0), which is blended with the FAISS similarity score to push genuinely newsworthy games to the top of the context window:
 
-**Auto-labeling:** No ground-truth "notable game" labels exist in any API. We designed a 7-rule labeler requiring ≥2 rules to fire, yielding a 43/57 notable/routine split across 7,802 games (2023–2026).
+| Rule | Threshold |
+|------|-----------|
+| Close game | margin ≤ 1 run |
+| Extra innings | any extra-inning game |
+| Offensive explosion | ≥ 14 total runs |
+| Blowout | margin ≥ 8 runs |
+| Shutout | winning team held opponent scoreless |
+| HR barrage | ≥ 4 total home runs |
+| Dominant pitching | winning pitcher ≥ 11 strikeouts |
 
-**Temporal split:** train on 2023–2024, validate on 2025, test on held-out 2026 games.
+**Blended score:** `sim_score + 0.25 × notability_score`
 
-| Split | Games | Macro F1 |
-|-------|-------|----------|
-| Val (2025) | 2,428 | **0.9866** |
-| Test (2026) | 419 | **~0.99** |
-
-Note: This component is overkill and really not necessary. However, it does provide a continuous probability of a game being "notable", rather than a binary decision.
+An MLP trained on the same features was explored (W&B grid search, 24 configs, val macro F1 = 0.9866) but replaced — it was learning to approximate these same rules from their own outputs, adding no new signal. The rule-based scorer is simpler, interpretable, and equivalent for reranking.
 
 ---
 

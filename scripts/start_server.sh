@@ -6,7 +6,6 @@ PORT=${1:-8080}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 export EMBEDDER_PATH="${EMBEDDER_PATH:-$REPO_ROOT/checkpoints/mlb-minilm-finetuned}"
-export CLASSIFIER_PATH="${CLASSIFIER_PATH:-$REPO_ROOT/checkpoints/trend_classifier.pt}"
 export DATA_PATH="${DATA_PATH:-$REPO_ROOT/data/game_features_all.npz}"
 export QUERY_DAYS_BACK="${QUERY_DAYS_BACK:-30}"
 # Optional: route queries through a local Llama model via ollama (no Claude credits for queries)
